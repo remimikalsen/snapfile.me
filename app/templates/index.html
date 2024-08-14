@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SnapFile.me - Secure File Sharing</title>
+    <link rel="icon" href="/static/favicon.png" type="image/png">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        h1 {
+            color: #007acc;
+            display: flex;
+            align-items: center;
+        }
+        .upload-container {
+            background-color: #fff;
+            border: 2px dashed #007acc;
+            border-radius: 8px;
+            padding: 40px;
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            transition: background-color 0.3s ease;
+        }
+        .upload-container.dragover {
+            background-color: #e6f7ff;
+        }
+        .upload-container input[type="file"] {
+            display: none;
+        }
+        .upload-container label {
+            display: block;
+            font-size: 18px;
+            color: #007acc;
+            cursor: pointer;
+            margin-bottom: 20px;
+            transition: color 0.3s ease;
+        }
+        .upload-container label:hover {
+            color: #005f99;
+        }
+        .upload-container button {
+            background-color: #007acc;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .upload-container button:hover {
+            background-color: #005f99;
+        }
+        .upload-container p {
+            font-size: 14px;
+            color: #666;
+        }
+        #progress {
+            display: none;
+            font-size: 18px;
+            color: #007acc;
+            margin-top: 20px;
+        }
+        #success-message, #error-message {
+            display: none;
+            font-size: 18px;
+            margin-top: 20px;
+            transition: opacity 0.5s ease;
+        }
+        #success-message {
+            color: #007acc;
+        }
+        #error-message {
+            color: #d9534f;
+        }
+        .icon {
+            font-size: 24px;
+        }
+        footer {
+            margin-top: 50px;
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+        }
+        footer img {
+            width: 24px;
+            vertical-align: middle;
+            margin-right: 10px;
+        }
+        @media (max-width: 600px) {
+            .upload-container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>SnapFile.me</h1>
+    <div class="upload-container" id="upload-container">
+        <label for="file-input">
+            <button id="browse-button">
+                <span class="icon">📂</span> Browse Files
+            </button>
+        </label>
+        <input type="file" id="file-input" aria-label="File Upload">
+        <p>or drag and drop a file here</p>
+        <p>Max file size: 500 MB</p>
+        <div id="progress">Uploading...</div>
+        <div id="success-message"></div>
+        <div id="error-message"></div>
+    </div>
+
+    <footer>
+        <p>
+            <img src="/static/favicon.png" alt="SnapFile.me logo">
+            Brought to you by <a href="https://theawesomegarage.com" target="_blank">TheAwesomeGarage.com</a>
+        </p>
+    </footer>
+
+    <script>
+        const uploadContainer = document.getElementById('upload-container');
+        const fileInput = document.getElementById('file-input');
+        const progress = document.getElementById('progress');
+        const successMessage = document.getElementById('success-message');
+        const errorMessage = document.getElementById('error-message');
+        const browseButton = document.getElementById('browse-button');
+
+        // Open file browser on button click
+        browseButton.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Drag and drop functionality
+        uploadContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadContainer.classList.add('dragover');
+        });
+
+        uploadContainer.addEventListener('dragleave', () => {
+            uploadContainer.classList.remove('dragover');
+        });
+
+        uploadContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadContainer.classList.remove('dragover');
+            fileInput.files = e.dataTransfer.files;
+            uploadFile(); // Automatically start the upload
+        });
+
+        // File input change handling
+        fileInput.addEventListener('change', uploadFile);
+
+        function uploadFile() {
+            if (fileInput.files.length === 0) {
+                alert('Please select a file first.');
+                return;
+            }
+
+            // Show progress indicator
+            progress.style.display = 'block';
+
+            // Create FormData object and append file
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                progress.style.display = 'none';
+                if (response.status === 429) {
+                    return response.text().then(text => {
+                        showError(text);
+                    });
+                } else {
+                    return response.text().then(data => {
+                        showSuccess(data);
+                    });
+                }
+            })
+            .catch(error => {
+                progress.style.display = 'none';
+                showError('Error uploading file');
+                console.error('Error:', error);
+            });
+        }
+
+        function showSuccess(data) {
+            successMessage.innerHTML = `Upload successful! <a href="${data}">Download your file here</a>`;
+            successMessage.style.display = 'block';
+            uploadContainer.style.opacity = 0; // Start fading out
+            setTimeout(() => {
+                uploadContainer.innerHTML = successMessage.innerHTML;
+                uploadContainer.style.opacity = 1; // Fade in the success message
+            }, 500); // Wait for the fade-out to complete
+        }
+
+        function showError(message) {
+            errorMessage.innerHTML = message;
+            errorMessage.style.display = 'block';
+            uploadContainer.style.opacity = 0; // Start fading out
+            setTimeout(() => {
+                uploadContainer.innerHTML = errorMessage.innerHTML;
+                uploadContainer.style.opacity = 1; // Fade in the error message
+            }, 500); // Wait for the fade-out to complete
+        }
+    </script>
+</body>
+</html>
+
