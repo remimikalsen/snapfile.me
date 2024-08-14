@@ -1,6 +1,8 @@
 # SnapFile.me - Secure File Sharing
 
-SnapFile.me is a simple and secure file sharing service. Upload files and get a download link that you can share. The service limits uploads and downloads per IP address and ensures secure file handling.
+SnapFile.me is a simple and secure file sharing service. Upload files and get a download link that you can share. The download link will only work once, after visiting the link, the file is deleted from the server. The service also limits uploads and downloads per IP address and ensures secure file handling.
+
+NOTE! FILES ARE NOT ENCRYPTED AT REST.
 
 ## Features
 
@@ -48,7 +50,8 @@ Without the database, the system won't be able to match a download URL to a file
 
 Visit http://localhost:8080
 
-## Pending improvements
+## Planned improvements
 - Set up a MAX_TTL on all files uploaded
 - Make sure the database and files folder are in sync on each startup
 - Give notice of upload limit reached BEFORE attempting to upload
+- General GUI improvements
