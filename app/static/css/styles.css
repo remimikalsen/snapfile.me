@@ -1,0 +1,228 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    color: #333;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+}
+
+h1 {
+    color: #007acc;
+    display: flex;
+    align-items: center;
+}
+
+.upload-container {
+    background-color: #fff;
+    border: 2px dashed #007acc;
+    border-radius: 8px;
+    padding: 40px;
+    padding-bottom: 30px;
+    width: 100%;
+    max-width: 500px;
+    text-align: center;
+    transition: background-color 0.3s ease;
+    position: relative;
+}
+
+.upload-container.dragover {
+    background-color: #e6f7ff;
+}
+
+.upload-container.disabled {
+    background-color: #f4f4f4;
+    border: none;
+    cursor: default;
+}
+
+.upload-container input[type="file"] {
+    display: none;
+}
+
+.upload-container label {
+    display: block;
+    font-size: 18px;
+    color: #007acc;
+    cursor: pointer;
+    margin-bottom: 20px;
+    transition: color 0.3s ease;
+}
+
+.upload-container label:hover {
+    color: #005f99;
+}
+
+.upload-container button {
+    background-color: #007acc;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.upload-container button:hover {
+    background-color: #005f99;
+}
+
+.upload-container p {
+    font-size: 14px;
+    color: #666;
+}
+
+#snapfile-status {
+    display: none;
+    text-align: center;
+    margin-top: 20px;
+}
+
+#progress {
+    font-size: 18px;
+    color: #007acc;
+    margin-top: 20px;
+}
+
+#progress-bar {
+    position: relative;
+    width: 100%;
+    background-color: #f3f3f3;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+#progress-bar > div {
+    height: 20px;
+    background-color: #4CAF50;
+    width: 0;
+}
+
+#progress-percentage {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    color: black;
+    font-weight: bold;
+    line-height: 20px;
+}
+
+.success-content {
+    padding: 20px;
+    border-radius: 5px;
+    text-align: center;
+}
+
+.success-content p {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin-bottom: 20px;
+}
+
+.success-link {
+    font-weight: normal;
+}
+
+.success-link-back {
+    display: block;
+    margin-top: 35px;
+    font-weight: bold;
+}
+
+.success-span-direct {
+    display: block;
+    font-size: 0.8em;
+}
+
+.success-span-share {
+    font-weight: normal;
+    display: block;
+    margin: 10px;
+}
+
+.success-button {
+    background-color: #007acc;
+    color: white;
+    border: none;
+    padding: 5px;
+    border-radius: 5px;
+    cursor: pointer;
+    display: inline;
+    align-items: center;
+    justify-content: center;
+}
+
+.success-button .material-icons {
+    font-size: 16px;
+    margin: 0px;
+}
+
+.success-button:hover {
+    background-color: #005f99;
+}
+
+#success-message, #error-message {
+    font-size: 18px;
+    margin-top: 20px;
+    transition: opacity 0.5s ease;
+}
+
+#success-message {
+    color: #007acc;
+}
+
+#error-message {
+    color: #d9534f;
+}
+
+.icon {
+    font-size: 24px;
+}
+
+footer {
+    margin-top: 50px;
+    text-align: center;
+    font-size: 14px;
+    color: #666;
+}
+
+footer img {
+    width: 24px;
+    vertical-align: middle;
+    margin-right: 10px;
+}
+
+@media (max-width: 600px) {
+    .upload-container {
+        padding: 20px;
+    }
+}
+
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background-color: #4CAF50; /* Green background */
+    color: white; /* White text */
+    padding: 15px; /* Padding */
+    border-radius: 5px; /* Rounded corners */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Shadow for better visibility */
+    transition: opacity 0.5s ease-in-out; /* Smooth fade-out transition */
+    z-index: 1000; /* Ensure it appears above other elements */
+}
+
+.landing-page-back {
+    display: block;
+    margin-top: 35px;
+    font-weight: bold;
+}

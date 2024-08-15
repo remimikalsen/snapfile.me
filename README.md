@@ -51,7 +51,4 @@ Without the database, the system won't be able to match a download URL to a file
 Visit http://localhost:8080
 
 ## Planned improvements
-- Set up a MAX_TTL on all files uploaded
-- Make sure the database and files folder are in sync on each startup
-- Give notice of upload limit reached BEFORE attempting to upload
 - General GUI improvements

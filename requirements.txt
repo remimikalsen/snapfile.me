@@ -2,3 +2,4 @@ aiohttp==3.8.5
 aiohttp-jinja2==1.5
 jinja2==3.1.2
 werkzeug==2.3.6
+APScheduler==3.9.1

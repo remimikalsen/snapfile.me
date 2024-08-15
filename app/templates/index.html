@@ -5,110 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SnapFile.me - Secure File Sharing</title>
     <link rel="icon" href="/static/favicon.png" type="image/png">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-            color: #333;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-        }
-        h1 {
-            color: #007acc;
-            display: flex;
-            align-items: center;
-        }
-        .upload-container {
-            background-color: #fff;
-            border: 2px dashed #007acc;
-            border-radius: 8px;
-            padding: 40px;
-            width: 100%;
-            max-width: 500px;
-            text-align: center;
-            transition: background-color 0.3s ease;
-        }
-        .upload-container.dragover {
-            background-color: #e6f7ff;
-        }
-        .upload-container input[type="file"] {
-            display: none;
-        }
-        .upload-container label {
-            display: block;
-            font-size: 18px;
-            color: #007acc;
-            cursor: pointer;
-            margin-bottom: 20px;
-            transition: color 0.3s ease;
-        }
-        .upload-container label:hover {
-            color: #005f99;
-        }
-        .upload-container button {
-            background-color: #007acc;
-            color: #fff;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-        .upload-container button:hover {
-            background-color: #005f99;
-        }
-        .upload-container p {
-            font-size: 14px;
-            color: #666;
-        }
-        #progress {
-            display: none;
-            font-size: 18px;
-            color: #007acc;
-            margin-top: 20px;
-        }
-        #success-message, #error-message {
-            display: none;
-            font-size: 18px;
-            margin-top: 20px;
-            transition: opacity 0.5s ease;
-        }
-        #success-message {
-            color: #007acc;
-        }
-        #error-message {
-            color: #d9534f;
-        }
-        .icon {
-            font-size: 24px;
-        }
-        footer {
-            margin-top: 50px;
-            text-align: center;
-            font-size: 14px;
-            color: #666;
-        }
-        footer img {
-            width: 24px;
-            vertical-align: middle;
-            margin-right: 10px;
-        }
-        @media (max-width: 600px) {
-            .upload-container {
-                padding: 20px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
     <h1>SnapFile.me</h1>
@@ -119,9 +17,16 @@
             </button>
         </label>
         <input type="file" id="file-input" aria-label="File Upload">
-        <p>or drag and drop a file here</p>
+        <p>or drag and drop a file here to generate a download-only-once link.</p>
         <p>Max file size: 500 MB</p>
+    </div>
+
+    <div id="snapfile-status">
         <div id="progress">Uploading...</div>
+        <div id="progress-bar">
+            <div></div>
+            <span id="progress-percentage">0%</span>
+        </div>
         <div id="success-message"></div>
         <div id="error-message"></div>
     </div>
@@ -133,13 +38,19 @@
         </p>
     </footer>
 
+    <div id="notification" class="notification" style="display: none;"></div>
+
     <script>
         const uploadContainer = document.getElementById('upload-container');
         const fileInput = document.getElementById('file-input');
+        const snapfileStatus = document.getElementById('snapfile-status');
         const progress = document.getElementById('progress');
+        const progressBar = document.getElementById('progress-bar').firstElementChild;
+        const progressPercentage = document.getElementById('progress-percentage');
         const successMessage = document.getElementById('success-message');
         const errorMessage = document.getElementById('error-message');
         const browseButton = document.getElementById('browse-button');
+        const notification = document.getElementById('notification');
 
         // Open file browser on button click
         browseButton.addEventListener('click', () => {
@@ -172,56 +83,148 @@
                 return;
             }
 
-            // Show progress indicator
-            progress.style.display = 'block';
+            // Show progress indicator and disable new uploads
+            showStatus('progress');
+            disableUpload();
 
             // Create FormData object and append file
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
 
-            fetch('/upload', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => {
-                progress.style.display = 'none';
-                if (response.status === 429) {
-                    return response.text().then(text => {
-                        showError(text);
-                    });
-                } else {
-                    return response.text().then(data => {
-                        showSuccess(data);
-                    });
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/upload', true);
+
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    const percentComplete = Math.round((event.loaded / event.total) * 100);
+                    progressBar.style.width = percentComplete + '%';
+                    progressPercentage.innerText = percentComplete + '%';
                 }
-            })
-            .catch(error => {
-                progress.style.display = 'none';
+            };
+
+            xhr.onload = () => {
+                hideStatus('progress');
+                if (xhr.status === 200) {
+                    showSuccess(xhr.responseText);
+                } else if (xhr.status === 429) {
+                    showError(xhr.responseText);
+                } else {
+                    showError('Error uploading file');
+                }
+            };
+
+            xhr.onerror = () => {
+                hideStatus('progress');
                 showError('Error uploading file');
-                console.error('Error:', error);
-            });
+            };
+
+            xhr.send(formData);
+        }
+
+        function showStatus(status) {
+            snapfileStatus.style.display = 'block';
+            uploadContainer.style.display = 'none';
+            if (status === 'progress') {
+                progress.style.display = 'block';
+                progressBar.parentElement.style.display = 'block';
+            }
+        }
+
+        function showError(status) {
+            errorMessage.innerText = status;
+            snapfileStatus.style.display = 'block';
+            uploadContainer.style.display = 'none';
+            progress.style.display = 'none';
+            progressPercentage.style.display = 'none';
+        }
+
+
+        function hideStatus(status) {
+            if (status === 'progress') {
+                progress.style.display = 'none';
+                progressBar.parentElement.style.display = 'none';
+            }
         }
 
         function showSuccess(data) {
-            successMessage.innerHTML = `Upload successful! <a href="${data}">Download your file here</a>`;
+            const landingURL = `${window.location.origin}/landing${data}`;
+            const publicDownloadUrl = `${window.location.origin}${data}`;
+
+            successMessage.innerHTML = `
+                <div class="success-content">
+                    <p>Upload successful</p>
+                    <span>Here is the <a href="${landingURL}" class="success-link">link to the download page</a>.</span>
+                    <span class="success-span-share">Click the icon to copy the link to your clipboard for sharing.
+                        <button id="copy-landing-link-button" class="success-button" aria-label="Copy landing page link to clipboard">
+                            <span class="material-icons">content_copy</span>
+                        </button>
+                    </span>
+                    <span class="success-span-direct">or use this <a href="${publicDownloadUrl}" class="success-link-direct">direct download-once-only link</a>.</span>
+                    <a href="/" class="success-link-back">Back to front page</a>
+                </div>
+            `;
             successMessage.style.display = 'block';
-            uploadContainer.style.opacity = 0; // Start fading out
+            snapfileStatus.style.opacity = 0; // Start fading out
             setTimeout(() => {
-                uploadContainer.innerHTML = successMessage.innerHTML;
-                uploadContainer.style.opacity = 1; // Fade in the success message
+                snapfileStatus.innerHTML = successMessage.innerHTML;
+                snapfileStatus.style.opacity = 1; // Fade in the success message
+                document.getElementById('copy-landing-link-button').addEventListener('click', () => {
+                    copyToClipboard(landingURL); // Pass the correct URL
+                });
             }, 500); // Wait for the fade-out to complete
         }
 
-        function showError(message) {
-            errorMessage.innerHTML = message;
-            errorMessage.style.display = 'block';
-            uploadContainer.style.opacity = 0; // Start fading out
-            setTimeout(() => {
-                uploadContainer.innerHTML = errorMessage.innerHTML;
-                uploadContainer.style.opacity = 1; // Fade in the error message
-            }, 500); // Wait for the fade-out to complete
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showNotification('Link copied to clipboard!');
+            }).catch(err => {
+                console.error('Error copying text: ', err);
+            });
         }
+
+        function showNotification(message) {
+            notification.innerText = message;
+            notification.style.display = 'block';
+            setTimeout(() => {
+                notification.style.opacity = 0;
+                setTimeout(() => {
+                    notification.style.display = 'none';
+                    notification.style.opacity = 1;
+                }, 500);
+            }, 3000);
+        }
+
+        // Check limit status on page load
+        window.addEventListener('load', () => {
+            fetch('/check-limit')
+                .then(response => {
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.limit_reached) {
+                        showError('Upload limit has been reached.');
+                        disableUpload();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking limit:', error);
+                });
+        });
+
+        function disableUpload() {
+            fileInput.disabled = true;
+            browseButton.disabled = true;
+            browseButton.style.cursor = 'not-allowed';
+            uploadContainer.classList.add('disabled');
+            uploadContainer.innerHTML = ''; // Clear the container
+            uploadContainer.removeEventListener('dragover', preventDefault);
+            uploadContainer.removeEventListener('drop', preventDefault);
+        }
+
+        function preventDefault(e) {
+            e.preventDefault();
+        }
+
     </script>
 </body>
 </html>
-

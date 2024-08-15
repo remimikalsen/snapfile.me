@@ -5,6 +5,9 @@ COPY requirements.txt /app
 
 WORKDIR /app
 
+RUN mkdir /app/uploads
+RUN mkdir /app/database
+
 RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 8080

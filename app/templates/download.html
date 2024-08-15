@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SnapFile.me - File download</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SnapFile.me - File download</h1>
+        </header>
+        <main>
+            <h2>Download file</h2>
+            <p>Click the link below to download <strong>{{ filename }}</strong>:</p>
+            <a class="btn" href="{{ download_link }}">Download now</a>
+            <p>Remember - this is your once and only chance to download the file!</p>
+            <br />
+            <a class="btn" href="http://{{ internal_ip }}:{{ internal_port }}{{ download_link }}">Direct IP download</a>
+            <br />
+            <a href="/" class="landing-page-back">Back to front page</a>
+        </main>
+        <footer>
+            <p>
+                <img src="/static/favicon.png" alt="SnapFile.me logo">
+                Brought to you by <a href="https://theawesomegarage.com" target="_blank">TheAwesomeGarage.com</a>
+            </p>
+        </footer>
+    </div>
+</body>
+</html>
