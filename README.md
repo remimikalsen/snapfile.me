@@ -20,7 +20,7 @@ NOTE! FILES ARE NOT ENCRYPTED AT REST.
 ### Clone the Repository
 
 ```
-git clone https://github.com/yourusername/snapfile.me
+git clone https://github.com/remimikalsen/snapfile.me
 ```
 
 ### Docker compose
