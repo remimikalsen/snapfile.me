@@ -44,11 +44,13 @@ aiohttp_jinja2.setup(
 
 def get_client_ip(request):
     """Retrieve the client's IP address from the request."""
-    peername = request.transport.get_extra_info('peername')
-    if peername is not None:
-        host, port = peername
-        return host
-    return None
+    forwarded_for = request.headers.get('X-Forwarded-For')
+    if forwarded_for:
+        # The X-Forwarded-For header can contain multiple IPs, the first one is the client's original IP
+        ip = forwarded_for.split(',')[0].strip()
+    else:
+        ip = request.remote
+    return ip
 
 def ip_reached_quota(ip):
     """Check the IP usage and reset the count if it's a new day."""
