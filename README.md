@@ -1,34 +1,40 @@
-# SnapFile.me - Secure File Sharing
+# SnapFile.me
 
-## About SnapFile.me
+**SnapFile.me is a simple and secure file sharing service.**
 
-SnapFile.me is a simple and secure file sharing service built using Python's aiohttp framework. 
+With SnapFile.me, you upload a file and get a single-use download link back. The provided link is valid for a limited amount of time. You can share the link, or use it yourself, but once you have downloaded the file, it's deleted.
 
-### File Upload
+SnapFile.me is anonymous, but still limits your usage through hashing your IP and storing it in the SnapFile.me database in order to maintain an upload quota per IP.
+
+Quotas, quota renewal, uploaded file expiration and much more can be customized.
+
+## How does it work?
+
+### File upload
 
 - Users can upload files on the front page.
 - The server saves the file, generates a unique download code, and stores the file information in a SQLite database.
 - The user receives a download link that can be used to download the file once.
 
-### File Download
+### File download
 
 - Users can download the file using the provided download link.
 - The server verifies the download code, retrieves the file information from the database, and serves the file.
 - The download link is valid for a single use and expires after a specified time.
 
-### Quota Management
+### Quota management
 
 - The app tracks the number of uploads per IP address to enforce a time based usage quota.
 - The quota is reset periodically based on the configured interval.
 
-### File Expiry and Purging
+### File expiry and purging
 
 - Uploaded files have an expiry time after which they are deleted.
 - A scheduled task periodically purges expired files and cleans up the database.
 
-## Setup Instructions
+## Setup and configuration instructions
 
-### Clone the Repository
+### Clone the repository
 
 ```
 git clone https://github.com/remimikalsen/snapfile.me
@@ -81,6 +87,3 @@ Also make sure that the uploads and database directories exist on your computer 
 ## Accessing the web interface
 
 Visit http://localhost:8080
-
-## Planned improvements
-- General GUI improvements
