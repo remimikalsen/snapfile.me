@@ -7,26 +7,30 @@
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
-    <h1>SnapFile.me - download your file</h1>
-    <div id="download-area">
-        <h2>{{ filename }}</h2>
-        <button id="download-button" onclick="window.location.href='{{ download_link }}'">Download now</button>
-        <p id="time-left"></p>
-        <span class="success-span-direct">Use the <a href="http://{{ internal_ip }}:{{ internal_port }}{{ download_link }}">direct IP download</a> if you're on the same network as the SnapFile.me server.</span>
-    </div>
-    <div id="download-notification"></div>
-    <div class="to-home">
-        <span class="link-back-span">[ <a href="/" class="success-link-back">Share a file with Snap.me</a> ]</span>
-    </div>
-    <footer class="landing-page">
+    <header>
+        <a href="/" class="logo-link"><h1>SnapFile.me</h1></a>
+    </header>
+    <main>
+        <h2>Download your file</h3>
+        <div id="download-area">
+            <h3>{{ filename }}</h3>
+            <button id="download-button" onclick="window.location.href='{{ download_link }}'">Download now</button>
+            <p id="time-left"></p>
+            <span class="success-span-direct">Use the <a href="http://{{ internal_ip }}:{{ internal_port }}{{ download_link }}">direct IP download</a> if you're on the same network as the SnapFile.me server.</span>
+        </div>
+        <div id="download-notification"></div>
+        <div class="to-home">
+            <span class="link-back-span">[ <a href="/" class="success-link-back">Share a file with Snap.me</a> ]</span>
+        </div>
+    </main>
+    <footer>
         <p>
-            <img src="/static/favicon.png" alt="SnapFile.me logo">
-            Brought to you by <a href="https://theawesomegarage.com" target="_blank" class="success-link-back">TheAwesomeGarage.com</a>
-            <br />
-            View the soruce code on <a href="https://github.com/remimikalsen/snapfile.me" target="_blank">GitHub.com</a>
+            Brought to you by <a href="https://theawesomegarage.com" target="_blank">TheAwesomeGarage.com</a>
+        </p>
+        <p>
+            View the source code on <a href="https://github.com/remimikalsen/snapfile.me" target="_blank">GitHub.com</a>
         </p>
     </footer>
-    </div>
     <script>
         async function fetchTimeLeft() {
             const response = await fetch(`/time-left/{{ download_code }}`);

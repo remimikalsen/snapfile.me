@@ -9,46 +9,52 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
-    <h1>SnapFile.me</h1>
-    <div class="upload-container" id="upload-container">
-        <label for="file-input">
-            <button id="browse-button">
-                <span class="icon" role="button">📂</span> Browse Files
-            </button>
-        </label>
-        <input type="file" id="file-input" aria-label="File Upload">
-        <p>or drag and drop a file here to download it.</p> 
-        <p>
-            Uploading a file will generate link that can be downloaded once. <br /> 
-            The link will be valid for {{ file_expiry_hours }} hours, {{ file_expiry_minutes }} minutes. <br />
-            Maximum file size is {{ max_file_size }} MB
-        </p>
-    </div>
-
-    <div id="snapfile-status">
-        <div id="progress">Uploading...</div>
-        <div id="progress-bar">
-            <div></div>
-            <span id="progress-percentage">0%</span>
+    <header>
+        <a href="/" class="logo-link"><h1>SnapFile.me</h1></a>
+    </header>
+    <main>
+        <div id="upload-container">
+            <h2>Share a file!</h2>
+            <div id="upload-area">
+                <label for="file-input">
+                    <button id="browse-button">
+                        <span class="icon" role="button">📂</span> Browse Files
+                    </button>
+                </label>
+                <input type="file" id="file-input" aria-label="File Upload">
+                <p>or drag and drop a file here to upload it.</p> 
+            </div>
+            <p class="upload-helptext">
+                Uploading a file generates a link that can be downloaded once. <br /> 
+                The link will be valid for {{ file_expiry_hours }} hours, {{ file_expiry_minutes }} minutes. <br />
+                Maximum file size is {{ max_file_size }} MB
+            </p>
         </div>
-        <div id="success-message"></div>
-        <div id="error-message"></div>
-    </div>
 
-    <footer>
+        <div id="snapfile-status">
+            <div id="progress">Uploading...</div>
+            <div id="progress-bar">
+                <div></div>
+                <span id="progress-percentage">0%</span>
+            </div>
+            <div id="success-message"></div>
+            <div id="error-message"></div>
+        </div>
         <p class="quota-info"></p>
+    </main>
+    <footer>
         <p>
-            <img src="/static/favicon.png" alt="SnapFile.me logo">
             Brought to you by <a href="https://theawesomegarage.com" target="_blank">TheAwesomeGarage.com</a>
-            <br />
-            View the soruce code on <a href="https://github.com/remimikalsen/snapfile.me" target="_blank">GitHub.com</a>
+        </p>
+        <p>
+            View the source code on <a href="https://github.com/remimikalsen/snapfile.me" target="_blank">GitHub.com</a>
         </p>
     </footer>
-
-    <div id="notification" class="notification" style="display: none;"></div>
+    <div id="link-copy-notification" style="display: none;"></div>
 
     <script>
         const uploadContainer = document.getElementById('upload-container');
+        const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
         const snapfileStatus = document.getElementById('snapfile-status');
         const progress = document.getElementById('progress');
@@ -57,7 +63,7 @@
         const successMessage = document.getElementById('success-message');
         const errorMessage = document.getElementById('error-message');
         const browseButton = document.getElementById('browse-button');
-        const notification = document.getElementById('notification');
+        const linkCopyNotification = document.getElementById('link-copy-notification');
 
         // Open file browser on button click
         browseButton.addEventListener('click', () => {
@@ -65,18 +71,18 @@
         });
 
         // Drag and drop functionality
-        uploadContainer.addEventListener('dragover', (e) => {
+        uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
-            uploadContainer.classList.add('dragover');
+            uploadArea.classList.add('dragover');
         });
 
-        uploadContainer.addEventListener('dragleave', () => {
-            uploadContainer.classList.remove('dragover');
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
         });
 
-        uploadContainer.addEventListener('drop', (e) => {
+        uploadArea.addEventListener('drop', (e) => {
             e.preventDefault();
-            uploadContainer.classList.remove('dragover');
+            uploadArea.classList.remove('dragover');
             fileInput.files = e.dataTransfer.files;
             uploadFile(); // Automatically start the upload
         });
@@ -92,7 +98,6 @@
 
             // Show progress indicator and disable new uploads
             showStatus('progress');
-            disableUpload();
 
             // Create FormData object and append file
             const formData = new FormData();
@@ -184,20 +189,20 @@
 
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(() => {
-                showNotification('Link copied to clipboard!');
+                showLinkCopyNotification('Link copied to clipboard!');
             }).catch(err => {
                 console.error('Error copying text: ', err);
             });
         }
 
-        function showNotification(message) {
-            notification.innerText = message;
-            notification.style.display = 'block';
+        function showLinkCopyNotification(message) {
+            linkCopyNotification.innerText = message;
+            linkCopyNotification.style.display = 'block';
             setTimeout(() => {
-                notification.style.opacity = 0;
+                linkCopyNotification.style.opacity = 0;
                 setTimeout(() => {
-                    notification.style.display = 'none';
-                    notification.style.opacity = 1;
+                    linkCopyNotification.style.display = 'none';
+                    linkCopyNotification.style.opacity = 1;
                 }, 500);
             }, 3000);
         }
@@ -211,8 +216,6 @@
                 .then(data => {
                     if (data.limit_reached) {
                         showError('Upload limit has been reached.');
-                        disableUpload();
-
                     }
                     document.querySelector('.quota-info').innerText = `You have ${data.quota_left} uploads left on your quota.
                         The quota will reset in ${data.quota_renewal_hours} hours and ${data.quota_renewal_minutes} minutes.`;
@@ -221,16 +224,6 @@
                     console.error('Error checking limit:', error);
                 });
         });
-
-        function disableUpload() {
-            fileInput.disabled = true;
-            browseButton.disabled = true;
-            browseButton.style.cursor = 'not-allowed';
-            uploadContainer.classList.add('disabled');
-            uploadContainer.innerHTML = ''; // Clear the container
-            uploadContainer.removeEventListener('dragover', preventDefault);
-            uploadContainer.removeEventListener('drop', preventDefault);
-        }
 
         function preventDefault(e) {
             e.preventDefault();

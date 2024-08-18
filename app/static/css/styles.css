@@ -3,61 +3,130 @@ body {
     background-color: #f4f4f4;
     color: #333;
     margin: 0;
-    padding: 0 10px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+header {
+    padding: 20px;
+    padding-top: 0;
+    text-align: left;
+}
+
+main {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100vh;
+    padding: 20px;
 }
+
+@media (max-width: 600px) {
+    main {
+        padding: 10px;
+    }
+}
+
+p.quota-info {
+    margin: 10px;
+    font-size: 0.8em;
+    color: #333;
+    text-align: center;
+    font-weight: bold;
+}
+
+
+footer {
+    padding: 20px;
+}
+
+footer p {
+    text-align: center;
+    color: #333333;
+    margin: 10px;
+}
+
+footer a {
+    text-decoration: none;
+    color: #004D80;
+}
+
 
 h1 {
     color: #007acc;
-    display: flex;
-    align-items: center;
+    text-align: left;
+    font-size: 2.3em;
 }
 
-.upload-container {
+h2 {
+    color: #333;
+    text-align: center;
+    font-size: 1.8em;
+    font-weight: bold;
+    margin-bottom: 20px;
+}
+
+
+p {
+    font-size: 1.2em;
+    color: #666;
+}
+
+a.logo-link {
+    text-decoration: none;
+    color: #007acc;
+    cursor: hand;
+}
+
+#upload-area {
     background-color: #fff;
     border: 2px dashed #007acc;
     border-radius: 8px;
-    padding: 40px;
-    margin: 0 10px;
-    padding-bottom: 30px;
+    padding: 10px;
+    padding-top: 30px;
     max-width: 500px;
     text-align: center;
     transition: background-color 0.3s ease;
     position: relative;
 }
 
-.upload-container.dragover {
+p.upload-helptext,
+#time-left {
+    font-size: 1em;
+    color: #333333;
+    text-align: center;
+    max-width: 500px;
+    padding: 0 10px;
+}
+
+#upload-area.dragover {
     background-color: #e6f7ff;
 }
 
-.upload-container.disabled {
+#upload-area.disabled {
     background-color: #f4f4f4;
     border: none;
     cursor: default;
 }
-
-.upload-container input[type="file"] {
+#upload-area input[type="file"] {
     display: none;
 }
 
-.upload-container label {
+#upload-area label {
     display: block;
-    font-size: 18px;
+    font-size: 1.2em;
     color: #007acc;
     cursor: pointer;
     margin-bottom: 20px;
     transition: color 0.3s ease;
+    width: 200px;
+    margin: 0 auto;
 }
 
-.upload-container label:hover {
-    color: #005f99;
-}
-
-.upload-container button,
+#upload-area button,
 #download-area button {
     background-color: #007acc;
     color: #fff;
@@ -65,26 +134,34 @@ h1 {
     padding: 10px 20px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 0.9em;
     transition: background-color 0.3s ease;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
+    width: 200px;
 }
 
-
-a.btn {
-    display: block;
+#upload-area p {
+    color: #666;
 }
 
-.upload-container button:hover {
+#upload-area button:hover {
     background-color: #005f99;
 }
 
-.upload-container p {
-    font-size: 14px;
-    color: #666;
+#upload-area .icon {
+    font-size: 2em;
+}
+
+.success-link-back, .success-link {
+    color: #005f99;
+    text-decoration: none;
+}
+
+.success-link-back:hover, .success-link:hover {
+    text-decoration: underline;
 }
 
 #snapfile-status {
@@ -96,7 +173,7 @@ a.btn {
 }
 
 #progress {
-    font-size: 18px;
+    font-size: 1.5em;
     color: #007acc;
     margin-top: 20px;
 }
@@ -131,11 +208,6 @@ a.btn {
     text-align: center;
 }
 
-.success-content h2 {
-    font-size: 1.2em;
-    font-weight: bold;
-    margin-bottom: 20px;
-}
 
 .success-link {
     font-weight: normal;
@@ -144,11 +216,7 @@ a.btn {
 .link-back-span {
     display: block;
     margin: 35px 0;
-    margin-bottom: 0;
-}
-
-.success-link-back {
-    color: #005f99;
+    margin-bottom: 20px;
 }
 
 .success-span-direct {
@@ -176,7 +244,7 @@ a.btn {
 }
 
 .success-button .material-icons {
-    font-size: 16px;
+    font-size: 1.5em;
     margin: 0px;
 }
 
@@ -185,49 +253,22 @@ a.btn {
 }
 
 #success-message, #error-message {
-    font-size: 18px;
+    font-size: 1.2em;
     margin-top: 20px;
     transition: opacity 0.5s ease;
-}
-
-#success-message {
-    color: #007acc;
 }
 
 #error-message {
     color: #a80000;
 }
 
-.icon {
-    font-size: 24px;
-}
-
-footer {
-    margin-top: 10px;
-    text-align: center;
-    font-size: 14px;
-    color: #666;
-}
-
-
-footer p.quota-info {
-    margin: 30px;
-    color: #333;
-}
-
-footer img {
+img.snapfile-logo {
     width: 24px;
     vertical-align: middle;
     margin-right: 10px;
 }
 
-@media (max-width: 600px) {
-    .upload-container {
-        padding: 20px;
-    }
-}
-
-.notification {
+#link-copy-notification {
     position: fixed;
     top: 20px;
     right: 20px;
@@ -238,12 +279,6 @@ footer img {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Shadow for better visibility */
     transition: opacity 0.5s ease-in-out; /* Smooth fade-out transition */
     z-index: 1000; /* Ensure it appears above other elements */
-}
-
-.landing-page-back {
-    display: block;
-    margin-top: 35px;
-    font-weight: bold;
 }
 
 #download-notification,
