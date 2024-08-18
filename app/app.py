@@ -9,6 +9,7 @@ import random
 import string
 import aiohttp_jinja2
 import jinja2
+import hashlib
 
 # Load configuration from environment variables
 MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 500 * 1024 * 1024))  # Default to 500 MB
@@ -58,6 +59,10 @@ aiohttp_jinja2.setup(
     app_key=APP_KEY
 )
 
+
+def hash_ip(ip):
+    return hashlib.sha256(ip.encode()).hexdigest()
+
 def get_client_ip(request):
     """Retrieve the client's IP address from the request."""
     forwarded_for = request.headers.get('X-Forwarded-For')
@@ -66,7 +71,7 @@ def get_client_ip(request):
         ip = forwarded_for.split(',')[0].strip()
     else:
         ip = request.remote
-    return ip
+    return hash_ip(ip)
 
 def ip_reached_quota(ip):
     """Check the IP usage and delete the record if it has expired."""
