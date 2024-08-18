@@ -3,9 +3,9 @@ services:
   snapfile:
     restart: unless-stopped
     container_name: snapfile
-    build: .
-    expose:
-      - "8080"
+    build: 
+      context: .
+      dockerfile: Dockerfile.snapfile
     ports:
       - "8080:8080"
     environment:
@@ -16,12 +16,8 @@ services:
       - QUOTA_RENEWAL_MINUTES=60  # 1 hour
       - PURGE_INTERVAL_MINUTES=5
       - CONSISTENCY_CHECK_INTERVAL_MINUTES=1440  # 24 hours
-      - BANDWIDTH_LIMIT=160mbps # equals 20 MB/s
       - INTERNAL_IP=127.0.0.1
       - INTERNAL_PORT=127.0.0.1
-    cap_add:
-      - NET_ADMIN  
-    volumes:
-      - /snapfile/uploads:/app/uploads
-      - /snapfile/database:/app/database
-
+    #volumes:
+    #  - /snapfile/uploads:/app/uploads
+    #  - /snapfile/database:/app/database
