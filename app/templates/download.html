@@ -7,29 +7,56 @@
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>SnapFile.me - File download</h1>
-        </header>
-        <main>
-            <h2>Download file</h2>
-            <p>Click the link below to download <strong>{{ filename }}</strong>:</p>
-            <a class="btn" href="{{ download_link }}">Download now</a>
-            <p>Remember - this is your once and only chance to download the file!</p>
-            <br />
-            <a class="btn" href="http://{{ internal_ip }}:{{ internal_port }}{{ download_link }}">Direct IP download</a>
-            <br />
-            <a href="/" class="landing-page-back">Back to front page</a>
-        </main>
-        <footer>
-            <p>
-                <img src="/static/favicon.png" alt="SnapFile.me logo">
-                Brought to you by <a href="https://theawesomegarage.com" target="_blank">TheAwesomeGarage.com</a>
-            </p>
-            <p>
-                View the soruce code on <a href="https://github.com/remimikalsen/snapfile.me" target="_blank">GitHub.com</a>
-            </p>
-        </footer>
+    <h1>SnapFile.me - download your file</h1>
+    <div id="download-area">
+        <h2>{{ filename }}</h2>
+        <button id="download-button" onclick="window.location.href='{{ download_link }}'">Download now</button>
+        <p id="time-left"></p>
+        <span class="success-span-direct">Use the <a href="http://{{ internal_ip }}:{{ internal_port }}{{ download_link }}">direct IP download</a> if you're on the same network as the SnapFile.me server.</span>
     </div>
+    <div id="download-notification"></div>
+    <div class="to-home">
+        <span class="link-back-span">[ <a href="/" class="success-link-back">Share a file with Snap.me</a> ]</span>
+    </div>
+    <footer class="landing-page">
+        <p>
+            <img src="/static/favicon.png" alt="SnapFile.me logo">
+            Brought to you by <a href="https://theawesomegarage.com" target="_blank" class="success-link-back">TheAwesomeGarage.com</a>
+            <br />
+            View the soruce code on <a href="https://github.com/remimikalsen/snapfile.me" target="_blank">GitHub.com</a>
+        </p>
+    </footer>
+    </div>
+    <script>
+        async function fetchTimeLeft() {
+            const response = await fetch(`/time-left/{{ download_code }}`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.hours_left !== undefined && data.minutes_left !== undefined) {
+                    document.getElementById('time-left').innerText = `Time left to download: ${data.hours_left} hours and ${data.minutes_left} minutes. Once downloaded, the file is immediately deleted.`;
+                } else {
+                    document.getElementById('time-left').innerText = data.message;
+                }
+            } else if (response.status === 404) {
+                document.getElementById('time-left').innerText = 'The file has expired or never existed.';
+            } else {
+                document.getElementById('time-left').innerText = 'Error fetching time left.';
+            }
+        }
+
+        function startTimer() {
+            fetchTimeLeft();
+            setInterval(fetchTimeLeft, 60000); // Fetch every minute
+        }
+
+        window.onload = startTimer;
+
+        document.getElementById('download-button').addEventListener('click', function() {
+            document.getElementById('download-area').style.display = 'none';
+            document.getElementById('download-notification').style.display = 'block';
+            document.getElementById('download-notification').innerText = 'File download was initiated. Plase check your downloads folder.';
+        });        
+    </script>
+
 </body>
 </html>

@@ -36,12 +36,11 @@
     </div>
 
     <footer>
-        <p class="quota_info"></p>
+        <p class="quota-info"></p>
         <p>
             <img src="/static/favicon.png" alt="SnapFile.me logo">
             Brought to you by <a href="https://theawesomegarage.com" target="_blank">TheAwesomeGarage.com</a>
-        </p>
-        <p>
+            <br />
             View the soruce code on <a href="https://github.com/remimikalsen/snapfile.me" target="_blank">GitHub.com</a>
         </p>
     </footer>
@@ -161,14 +160,14 @@
             successMessage.innerHTML = `
                 <div class="success-content">
                     <p>Upload successful</p>
-                    <span>Here is the <a href="${landingURL}" class="success-link">link to the download page</a>.</span>
-                    <span class="success-span-share">Click the icon to copy the link to your clipboard for sharing.
+                    <span>Share the <a href="${landingURL}" class="success-link">link to the download page</a>.</span>
+                    <span class="success-span-share">Click the icon to copy link to clipboard:
                         <button id="copy-landing-link-button" class="success-button" aria-label="Copy landing page link to clipboard">
                             <span class="material-icons">content_copy</span>
                         </button>
                     </span>
-                    <span class="success-span-direct">or use this <a href="${publicDownloadUrl}" class="success-link-direct">direct download-once-only link</a>.</span>
-                    <a href="/" class="success-link-back">Back to front page</a>
+                    <span class="success-span-direct">Or use this direct <a href="${publicDownloadUrl}" class="success-link-direct">download-once-only link</a>. The direct link is not suitable for Facebook and similar sharing, because they inspect the link before it's shared, causing the file to be registered as downloaded and then deleted.</span>
+                    <span class="link-back-span">[ <a href="/" class="success-link-back">Share another file with SnapFile.me</a> ]</span>
                 </div>
             `;
             successMessage.style.display = 'block';
@@ -215,10 +214,8 @@
                         disableUpload();
 
                     }
-                    document.querySelector('.quota_info').innerText = `
-                        You have ${data.quota_left} uploads left on your quota.
-                        The quota will reset in ${data.quota_renewal_hours} hours and ${data.quota_renewal_minutes} minutes.
-                    `;
+                    document.querySelector('.quota-info').innerText = `You have ${data.quota_left} uploads left on your quota.
+                        The quota will reset in ${data.quota_renewal_hours} hours and ${data.quota_renewal_minutes} minutes.`;
                 })
                 .catch(error => {
                     console.error('Error checking limit:', error);
@@ -244,10 +241,8 @@
             fetch('/check-limit')
                 .then(response => response.json())
                 .then(data => {
-                    document.querySelector('.quota_info').innerText = `
-                        You have ${data.quota_left} uploads left on your quota.
-                        The quota will reset in ${data.quota_renewal_hours} hours and ${data.quota_renewal_minutes} minutes.
-                    `;
+                    document.querySelector('.quota-info').innerText = `You have ${data.quota_left} uploads left on your quota.
+                        The quota will reset in ${data.quota_renewal_hours} hours and ${data.quota_renewal_minutes} minutes.`;
                 })
                 .catch(error => {
                     console.error('Error checking limit:', error);

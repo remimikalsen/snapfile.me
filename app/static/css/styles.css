@@ -57,7 +57,8 @@ h1 {
     color: #005f99;
 }
 
-.upload-container button {
+.upload-container button,
+#download-area button {
     background-color: #007acc;
     color: #fff;
     border: none;
@@ -72,6 +73,11 @@ h1 {
     gap: 10px;
 }
 
+
+a.btn {
+    display: block;
+}
+
 .upload-container button:hover {
     background-color: #005f99;
 }
@@ -84,9 +90,8 @@ h1 {
 #snapfile-status {
     display: none;
     text-align: center;
-    padding: 40px;
     margin: 0 10px;
-    padding-bottom: 30px;
+    padding-bottom: 0px;
     max-width: 500px;
 }
 
@@ -121,7 +126,7 @@ h1 {
 }
 
 .success-content {
-    padding: 20px;
+    padding: 0 20px;
     border-radius: 5px;
     text-align: center;
 }
@@ -136,10 +141,14 @@ h1 {
     font-weight: normal;
 }
 
-.success-link-back {
+.link-back-span {
     display: block;
-    margin-top: 35px;
-    font-weight: bold;
+    margin: 35px 0;
+    margin-bottom: 0;
+}
+
+.success-link-back {
+    color: #005f99;
 }
 
 .success-span-direct {
@@ -159,6 +168,7 @@ h1 {
     border: none;
     padding: 5px;
     border-radius: 5px;
+    margin-left: 5px;
     cursor: pointer;
     display: inline;
     align-items: center;
@@ -199,7 +209,8 @@ footer {
     color: #666;
 }
 
-footer p.quota_info {
+
+footer p.quota-info {
     margin: 30px;
     color: #333;
 }
@@ -233,4 +244,21 @@ footer img {
     display: block;
     margin-top: 35px;
     font-weight: bold;
+}
+
+#download-notification,
+#download-area {
+    display: block;
+    text-align: center;
+    margin: 0 10px;
+    padding-bottom: 0px;
+    max-width: 500px;
+}
+
+#download-notification {
+    display: none;
+}
+
+div.to-home {
+    margin-bottom: 30px;
 }

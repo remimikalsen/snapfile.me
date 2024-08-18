@@ -184,6 +184,7 @@ async def landing_page_download(request):
             context = {
                 'filename': filename,
                 'download_link': download_link,
+                'download_code': download_code,
                 'internal_ip': INTERNAL_IP,
                 'internal_port': INTERNAL_PORT
             }
@@ -256,6 +257,39 @@ async def check_limit(request):
                                   "quota_renewal_hours": quota_renewal_hours,
                                   "quota_renewal_minutes": quota_renewal_minutes})
 
+async def time_left(request):
+    download_code = request.match_info['download_code']
+
+    # Retrieve the file info from the database
+    conn = sqlite3.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
+    c = conn.cursor()
+    c.execute("SELECT upload_time FROM files WHERE download_code=?", (download_code,))
+    result = c.fetchone()
+    conn.close()
+
+    if result:
+        upload_time = result[0]
+        expiry_time = upload_time + timedelta(minutes=FILE_EXPIRY_MINUTES)
+        current_time = datetime.now()
+        time_left = expiry_time - current_time
+
+        if time_left.total_seconds() > 0:
+            hours_left = int(time_left.total_seconds() // 3600)
+            minutes_left = int((time_left.total_seconds() % 3600) // 60)
+            return web.json_response({
+                "hours_left": hours_left,
+                "minutes_left": minutes_left,
+                "message": "The file is available"
+            })
+        else:
+            return web.json_response({
+                "message": "The file has already expired."
+            }, status=410)
+    else:
+        return web.json_response({
+            "message": "Download code not found."
+        }, status=404)
+
 def purge_expired():
     """Delete files older than the configured expiry time and clean up the ip_usage database."""
     expiry_time = datetime.now() - timedelta(minutes=FILE_EXPIRY_MINUTES)
@@ -316,6 +350,7 @@ def create_app(purge_interval_minutes=PURGE_INTERVAL_MINUTES, consistency_check_
     app.router.add_get('/landing/download/{download_code}', landing_page_download)
     app.router.add_get('/download/{download_code}', download_file)
     app.router.add_get('/check-limit', check_limit)
+    app.router.add_get('/time-left/{download_code}', time_left)
     app.router.add_static('/static', './static')
     app.router.add_get('/{tail:.*}', handle_404)
 
