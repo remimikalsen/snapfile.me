@@ -4,9 +4,11 @@
 
 With SnapFile.me, you upload a file and get a single-use download link back. The provided link is valid for a limited amount of time. You can share the link, or use it yourself, but once you have downloaded the file, it's deleted.
 
-SnapFile.me is anonymous, but still limits your usage through hashing your IP and storing it in the SnapFile.me database in order to maintain an upload quota per IP.
+SnapFile.me is anonymous, but still limits usage through hashing the client IP and storing it in the SnapFile.me database. Quotas, quota renewal, uploaded file expiration and much more can be customized.
 
-Quotas, quota renewal, uploaded file expiration and much more can be customized.
+SnapFile.me doesnt' by itself encrypt traffic, but it's easy enouth to put it behind a reverse proxy like Nginx or Traefik. SnapFile.me will read the X-Forwarded-For headers to get the origining client's IP address.
+
+SnapFile.me doesn't by itself encrypt the data at rest, but you may encrypt the uploads directory (ecryptfs) or the entire volume the directory is on (Luks) if you wish to increase security somewhat. Files do however have a very short life on the server.
 
 ## How does it work?
 
