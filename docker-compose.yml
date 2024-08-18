@@ -11,9 +11,12 @@ services:
     environment:
       - TZ=${DOCKER_TZ}
       - MAX_FILE_SIZE=524288000  # 500 MB in bytes = 500 * 1024 * 1024
-      - MAX_USES_PER_DAY=5
+      - MAX_USES_QUOTA=5
+      - FILE_EXPIRY_MINUTES=1440  # 24 hours
+      - QUOTA_RENEWAL_MINUTES=60  # 1 hour
+      - PURGE_INTERVAL_MINUTES=5
+      - CONSISTENCY_CHECK_INTERVAL_MINUTES=1440  # 24 hours
       - INTERNAL_IP=127.0.0.1
-      - INTERNAL_PORT=8080
     volumes:
       - /snapfile/uploads:/app/uploads
       - /snapfile/database:/app/database

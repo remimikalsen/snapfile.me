@@ -3,7 +3,7 @@ body {
     background-color: #f4f4f4;
     color: #333;
     margin: 0;
-    padding: 0;
+    padding: 0 10px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -22,8 +22,8 @@ h1 {
     border: 2px dashed #007acc;
     border-radius: 8px;
     padding: 40px;
+    margin: 0 10px;
     padding-bottom: 30px;
-    width: 100%;
     max-width: 500px;
     text-align: center;
     transition: background-color 0.3s ease;
@@ -84,7 +84,10 @@ h1 {
 #snapfile-status {
     display: none;
     text-align: center;
-    margin-top: 20px;
+    padding: 40px;
+    margin: 0 10px;
+    padding-bottom: 30px;
+    max-width: 500px;
 }
 
 #progress {
@@ -190,10 +193,15 @@ h1 {
 }
 
 footer {
-    margin-top: 50px;
+    margin-top: 10px;
     text-align: center;
     font-size: 14px;
     color: #666;
+}
+
+footer p.quota_info {
+    margin: 30px;
+    color: #333;
 }
 
 footer img {

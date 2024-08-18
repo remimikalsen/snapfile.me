@@ -17,8 +17,12 @@
             </button>
         </label>
         <input type="file" id="file-input" aria-label="File Upload">
-        <p>or drag and drop a file here to generate a download-only-once link.</p>
-        <p>Max file size: 500 MB</p>
+        <p>or drag and drop a file here to download it.</p> 
+        <p>
+            Uploading a file will generate link that can be downloaded once. <br /> 
+            The link will be valid for {{ file_expiry_hours }} hours, {{ file_expiry_minutes }} minutes. <br />
+            Maximum file size is {{ max_file_size }} MB
+        </p>
     </div>
 
     <div id="snapfile-status">
@@ -32,6 +36,7 @@
     </div>
 
     <footer>
+        <p class="quota_info"></p>
         <p>
             <img src="/static/favicon.png" alt="SnapFile.me logo">
             Brought to you by <a href="https://theawesomegarage.com" target="_blank">TheAwesomeGarage.com</a>
@@ -171,6 +176,7 @@
                 document.getElementById('copy-landing-link-button').addEventListener('click', () => {
                     copyToClipboard(landingURL); // Pass the correct URL
                 });
+                updateQuotaInfo();
             }, 500); // Wait for the fade-out to complete
         }
 
@@ -204,7 +210,12 @@
                     if (data.limit_reached) {
                         showError('Upload limit has been reached.');
                         disableUpload();
+
                     }
+                    document.querySelector('.quota_info').innerText = `
+                        You have ${data.quota_left} uploads left on your quota.
+                        The quota will reset in ${data.quota_renewal_hours} hours and ${data.quota_renewal_minutes} minutes.
+                    `;
                 })
                 .catch(error => {
                     console.error('Error checking limit:', error);
@@ -224,6 +235,21 @@
         function preventDefault(e) {
             e.preventDefault();
         }
+
+        // Function to update quota information
+        function updateQuotaInfo() {
+            fetch('/check-limit')
+                .then(response => response.json())
+                .then(data => {
+                    document.querySelector('.quota_info').innerText = `
+                        You have ${data.quota_left} uploads left on your quota.
+                        The quota will reset in ${data.quota_renewal_hours} hours and ${data.quota_renewal_minutes} minutes.
+                    `;
+                })
+                .catch(error => {
+                    console.error('Error checking limit:', error);
+                });
+    }
 
     </script>
 </body>
