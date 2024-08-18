@@ -22,6 +22,7 @@ SnapFile.me doesn't by itself encrypt the data at rest, but you may encrypt the 
 
 - Users can download the file using the provided download link.
 - The server verifies the download code, retrieves the file information from the database, and serves the file.
+- The file will be deleted once it's downloaded (with a 5 second grace period in case of external inspection prior to downloading it)
 - The download link is valid for a single use and expires after a specified time.
 
 ### Quota management

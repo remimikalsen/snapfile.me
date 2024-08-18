@@ -10,6 +10,7 @@ import string
 import aiohttp_jinja2
 import jinja2
 import hashlib
+import asyncio
 
 # Load configuration from environment variables
 MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 500 * 1024 * 1024))  # Default to 500 MB
@@ -208,6 +209,7 @@ async def download_file(request):
             response = web.FileResponse(file_path)
             response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
             await response.prepare(request)
+            await asyncio.sleep(5)  # Wait for 5 seconds
             os.remove(file_path)  # Delete the file after downloading
             c.execute("DELETE FROM files WHERE download_code=?", (download_code,))
             conn.commit()
