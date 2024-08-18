@@ -49,23 +49,25 @@ cd snapfile.me
 docker compose up -d
 ```
 
-### Docker only
+### Docker only assure clean build
 ```
-docker build -t snapfile.me .
+cd snapfile.me
+docker build -t snapfile-image -f Dockerfile.snapfile .
 docker run -d \
+  --name snapfile \
+  --restart unless-stopped \
   -p 8080:8080 \
-  -v /path/to/uploads:/app/uploads \
-  -v /path/to/database:/app/database \
-  --env MAX_FILE_SIZE=524288000 \
-  --env MAX_USES_QUOTA=5 \
-  --env FILE_EXPIRY_MINUTES=1440 \
-  --env QUOTA_RENEWAL_MINUTES=60 \
-  --env PURGE_INTERVAL_MINUTES=5 \
-  --env CONSISTENCY_CHECK_INTERVAL_MINUTES=1440 \
-  --env INTERNAL_IP=127.0.0.1 \
-  --env INTERNAL_PORT=8080 \
-  --name snapfile.me-container \
-  snapfile.me
+  -e MAX_FILE_SIZE=524288000 \
+  -e MAX_USES_QUOTA=5 \
+  -e FILE_EXPIRY_MINUTES=1440 \
+  -e QUOTA_RENEWAL_MINUTES=60 \
+  -e PURGE_INTERVAL_MINUTES=5 \
+  -e CONSISTENCY_CHECK_INTERVAL_MINUTES=1440 \
+  -e INTERNAL_IP=127.0.0.1 \
+  -e INTERNAL_PORT=127.0.0.1 \
+  -v /snapfile/uploads:/app/uploads \
+  -v /snapfile/database:/app/database \
+  snapfile-image
 ```
 
 
