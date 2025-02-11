@@ -21,6 +21,7 @@ PURGE_INTERVAL_MINUTES = int(os.getenv('PURGE_INTERVAL_MINUTES', 5))  # Default 
 CONSISTENCY_CHECK_INTERVAL_MINUTES = int(os.getenv('CONSISTENCY_CHECK_INTERVAL_MINUTES', 1440))  # Default to database/file consistency check every 24 hours
 INTERNAL_IP = os.getenv('INTERNAL_IP', '')  # Default to empty string
 INTERNAL_PORT = os.getenv('INTERNAL_PORT', '')  # Default to emtpy string
+ANALYTICS_SCRIPT = os.getenv('ANALYTICS_SCRIPT', '')
 
 UPLOAD_DIR = '/app/uploads'
 DATABASE_DIR = '/app/database'
@@ -111,7 +112,8 @@ async def index(request):
     context = {
         'max_file_size': int(MAX_FILE_SIZE / 1024 / 1024),
         'file_expiry_hours': file_expiry_hours,
-        'file_expiry_minutes': file_expiry_minutes
+        'file_expiry_minutes': file_expiry_minutes,
+        'analytics_script': ANALYTICS_SCRIPT
     }
     return aiohttp_jinja2.render_template('index.html', request, context, app_key=APP_KEY)
 
@@ -187,7 +189,8 @@ async def landing_page_download(request):
                 'download_link': download_link,
                 'download_code': download_code,
                 'internal_ip': INTERNAL_IP,
-                'internal_port': INTERNAL_PORT
+                'internal_port': INTERNAL_PORT,
+                'analytics_script': ANALYTICS_SCRIPT
             }
             conn.close()
             return aiohttp_jinja2.render_template('download.html', request, context, app_key=APP_KEY)
@@ -216,11 +219,11 @@ async def download_file(request):
             conn.close()
             return response
     conn.close()
-    return aiohttp_jinja2.render_template('file_not_found.html', request, {}, app_key=APP_KEY)
+    return aiohttp_jinja2.render_template('file_not_found.html', request, {'analytics_script': ANALYTICS_SCRIPT}, app_key=APP_KEY)
     
 
 async def handle_404(request):
-    return aiohttp_jinja2.render_template('404.html', request, {}, app_key=APP_KEY)
+    return aiohttp_jinja2.render_template('404.html', request, {'analytics_script': ANALYTICS_SCRIPT}, app_key=APP_KEY)
 
 async def check_limit(request):
     ip = get_client_ip(request)

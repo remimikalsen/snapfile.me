@@ -82,6 +82,7 @@ Change --env variables and your local paths in the docker command or in docker-c
 - `CONSISTENCY_CHECK_INTERVAL_MINUTES`: Interval in minutes for checking database/file consistency and cleaning up (default: 1440 minutes or 24 hours).
 - `INTERNAL_IP`: Internal IP address for direct download links.
 - `INTERNAL_PORT`: Internal port for direct download links.
+- `ANALYTICS_SCRIPT`: The complete script tag needed for tracking from e.g. Plausible (default: empty)
 
 These environment variables allow the app to be configured for different deployment scenarios and usage patterns.
 
