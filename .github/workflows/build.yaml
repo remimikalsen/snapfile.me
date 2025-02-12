@@ -1,0 +1,76 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      # If your runner doesn't already have Docker installed, install docker first
+      # - name: Install Docker
+      #   run: |
+      #     sudo apt-get update
+      #     sudo apt-get install -y docker.io
+
+      - name: Determine next version
+        id: semver
+        run: |
+          CURRENT_VERSION=$(cat VERSION)
+          
+          MAJOR=$(echo $CURRENT_VERSION | cut -d '.' -f 1)
+          MINOR=$(echo $CURRENT_VERSION | cut -d '.' -f 2)
+          PATCH=$(echo $CURRENT_VERSION | cut -d '.' -f 3)
+
+          NEXT_MAJOR=$MAJOR
+          NEXT_MINOR=$MINOR
+          NEXT_PATCH=$((PATCH+1))
+
+          if [[ "${{ github.event.head_commit.message }}" =~ \[major\] ]]; then
+            NEXT_MAJOR=$((MAJOR+1))
+            NEXT_MINOR=0
+            NEXT_PATCH=0
+          elif [[ "${{ github.event.head_commit.message }}" =~ \[minor\] ]]; then
+            NEXT_MINOR=$((MINOR+1))
+            NEXT_PATCH=0
+          fi
+
+          NEXT_VERSION="${NEXT_MAJOR}.${NEXT_MINOR}.${NEXT_PATCH}"
+          echo "$NEXT_VERSION" > VERSION
+          echo "VERSION=$NEXT_VERSION" >> $GITHUB_ENV
+          echo "MAJOR=$NEXT_MAJOR" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker image
+        run: |
+          docker build -t snapfile:build .
+
+      - name: Tag Docker image
+        run: |
+          echo "Tagging image with version $VERSION ..."
+          docker tag snapfile:build ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}
+          docker tag snapfile:build ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}
+
+      - name: Login to GitHub Container Registry
+        if: always()
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
+
+      - name: Push Docker image
+        run: |
+          docker push ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}
+          docker push ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}
+
+      - name: Trigger production update
+        run: |
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"version": "'${{ env.VERSION }}'"}' \
+            https://webhooks.theawesomegarage.com/update-snapfile
