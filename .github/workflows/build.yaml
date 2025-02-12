@@ -50,7 +50,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t snapfile:build .
+          docker build -t snapfile:build -f Dockerfile.snapfile .
 
       - name: Tag Docker image
         run: |
