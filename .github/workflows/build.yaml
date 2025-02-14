@@ -61,6 +61,22 @@ jobs:
         run: |
           docker push ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}
           docker push ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}
+      
+      - name: Commit updated VERSION file
+        run: |
+          # Configure Git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+          # Ensure we're on 'main' branch
+          git checkout main
+      
+          # Stage and commit the updated VERSION file
+          git add VERSION
+          git commit -m "ci: bump version to ${{ env.VERSION }} [skip ci]" || echo "Just updating the VERSION file."
+      
+          # Push the change back to GitHub
+          git push origin HEAD:main
 
       - name: Trigger production update
         run: |
