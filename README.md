@@ -95,4 +95,4 @@ Also make sure that the uploads and database directories exist on your computer 
 Visit http://localhost:8080
 
 ## Note for developers:
-[Building and deploying automatically](https://theawesomegarage.com/blog/build-and-deploy-locally-using-github-actions-and-webhooks)
+This app is set up with support for GitHub Actions. That's nice to know if you fork it! Read about [building and deploying automatically](https://theawesomegarage.com/blog/build-and-deploy-locally-using-github-actions-and-webhooks).
