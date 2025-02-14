@@ -73,7 +73,7 @@ jobs:
       
           # Stage and commit the updated VERSION file
           git add VERSION
-          git commit -m "ci: bump version to ${{ env.VERSION }} [skip ci]" || echo "No changes to commit."
+          git commit -m "ci: bump version to ${{ env.VERSION }} [skip ci]" || echo "Just updating the VERSION file."
       
           # Push the change back to GitHub
           git push origin HEAD:main
