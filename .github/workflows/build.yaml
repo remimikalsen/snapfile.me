@@ -12,12 +12,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v3
 
-      # If your runner doesn't already have Docker installed, install docker first
-      # - name: Install Docker
-      #   run: |
-      #     sudo apt-get update
-      #     sudo apt-get install -y docker.io
-
       - name: Determine next version
         id: semver
         run: |
@@ -72,5 +66,6 @@ jobs:
         run: |
           curl -X POST \
             -H "Content-Type: application/json" \
+            -H "Secret: ${{ secrets.WEBHOOK_SECRET }}" \
             -d '{"version": "'${{ env.VERSION }}'"}' \
             https://webhooks.theawesomegarage.com/update-snapfile

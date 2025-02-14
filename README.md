@@ -93,3 +93,6 @@ Also make sure that the uploads and database directories exist on your computer 
 ## Accessing the web interface
 
 Visit http://localhost:8080
+
+## Note for developers:
+[Building and deploying automatically](https://theawesomegarage.com/blog/build-and-deploy-locally-using-github-actions-and-webhooks)
