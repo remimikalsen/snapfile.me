@@ -72,5 +72,6 @@ jobs:
         run: |
           curl -X POST \
             -H "Content-Type: application/json" \
+            -H "Secret: ${{ secrets.WEBHOOK_SECRET }}" \
             -d '{"version": "'${{ env.VERSION }}'"}' \
             https://webhooks.theawesomegarage.com/update-snapfile
