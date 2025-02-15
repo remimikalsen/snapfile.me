@@ -82,12 +82,11 @@ jobs:
           git tag "${{ env.VERSION }}" -m "ci: release version ${{ env.VERSION }}"
           git push origin "${{ env.VERSION }}"
 
-      - name: Retrieve PR body (if any)
+      - name: Retrieve PR body and commits (if any)
         id: get_pr
         uses: actions/github-script@v6
         with:
           script: |
-            // Attempt to find any pull requests associated with this commit
             const commitSHA = context.sha;
             const { owner, repo } = context.repo;
             const pulls = await github.rest.repos.listPullRequestsAssociatedWithCommit({
@@ -97,20 +96,40 @@ jobs:
             });
 
             if (pulls.data.length > 0) {
-              // Use the first PR found
-              return { body: pulls.data[0].body || "" };
+              const pr = pulls.data[0];
+              const commits = await github.rest.pulls.listCommits({
+                owner,
+                repo,
+                pull_number: pr.number
+              });
+
+              const commitMessages = commits.data.map(commit => commit.commit.message).join('\n');
+
+              return {
+                title: pr.title,
+                body: pr.body || "",
+                commit_messages: commitMessages
+              };
             } else {
-              return { body: "" };
+              return {
+                title: "",
+                body: "",
+                commit_messages: ""
+              };
             }
 
       - name: Create GitHub Release
-        uses: actions/create-release@v1
+        uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ env.VERSION }}
-          release_name: "Release ${{ env.VERSION }}"
-          body: ${{ steps.get_pr.outputs.body }}
+          name: "Release ${{ env.VERSION }}"
+          body: |
+            PR Title: ${{ steps.get_pr.outputs.title }}
+            PR Description: ${{ steps.get_pr.outputs.body }}
+            Commit Messages:
+            ${{ steps.get_pr.outputs.commit_messages }}
           draft: false
           prerelease: false
 
