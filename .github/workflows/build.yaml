@@ -98,20 +98,6 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           sha: ${{ steps.sha_resolver.outputs.TRUE_SHA }}
-          
-      - name: Debug PR Metadata
-        run: |
-          echo "Merge Type: ${{ steps.pr_meta.outputs.merge_type }}"
-          echo "PR Title: ${{ steps.pr_meta.outputs.title }}"
-          echo "PR Number: ${{ steps.pr_meta.outputs.number }}"
-      
-      - name: Set fallback PR metadata if no PR is found
-        if: steps.pr_meta.outputs.number == ''
-        run: |
-          echo "No PR found. Using fallback metadata."
-          echo "merge_type=DIRECT_PUSH" >> $GITHUB_OUTPUT
-          echo "title=Direct push to main" >> $GITHUB_OUTPUT
-          echo "number=0" >> $GITHUB_OUTPUT
       
       - name: Get commit messages
         run: |
@@ -120,47 +106,24 @@ jobs:
           else
             git log --pretty=format:%s ${{ github.event.before }}..${{ github.sha }} > commits.txt
           fi
-      
-      - name: Debug commits.txt
-        run: |
-          cat commits.txt
                   
       - name: Compile release notes
         run: |
-          # Set a default merge type if the output is empty
-          MERGE_TYPE="${{ steps.pr_meta.outputs.merge_type }}"
-          if [[ -z "$MERGE_TYPE" ]]; then
-            MERGE_TYPE="DIRECT_PUSH"
-          fi
-      
-          # Compile the release body based on the merge type
-          if [[ "$MERGE_TYPE" == "DIRECT_PUSH" ]]; then
-            RELEASE_BODY=$(cat <<EOF
-            ## Changes (Direct Push to Main)
-            
-            **Commit Summary**
-            $(awk '{print "• " $0}' commits.txt)
-            
-            ### Docker Tags
-            - Stable: ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}
-            - Major: ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}
-            EOF
-            )
-          else
-            RELEASE_BODY=$(cat <<EOF
-            ## Changes ($MERGE_TYPE)
-            
-            **PR Title:** ${{ steps.pr_meta.outputs.title }}
-            
-            ### Commit Summary
-            $(awk '{print "• " $0}' commits.txt)
-            
-            ### Docker Tags
-            - Stable: ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}
-            - Major: ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}
-            EOF
-            )
-          fi
+
+          RELEASE_BODY=$(cat <<EOF
+          # ${{ steps.pr_meta.outputs.pr_title }}
+
+          ## Summary
+          ${{ steps.pr_meta.outputs.pr_body }}
+          
+          ## Changes
+          $(awk '{print "• " $0}' commits.txt)
+          
+          ## Docker Tags
+          - Stable: ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}
+          - Major: ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}
+          EOF
+          )
       
           # Export the release body to the environment
           echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
