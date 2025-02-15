@@ -125,10 +125,17 @@ jobs:
       - name: Debug commits.txt
         run: |
           cat commits.txt
-      
+            
       - name: Compile release notes
         run: |
-          if [[ "${{ steps.pr_meta.outputs.merge_type }}" == "DIRECT_PUSH" ]]; then
+          # Set a default merge type if the output is empty
+          MERGE_TYPE="${{ steps.pr_meta.outputs.merge_type }}"
+          if [[ -z "$MERGE_TYPE" ]]; then
+            MERGE_TYPE="DIRECT_PUSH"
+          fi
+      
+          # Compile the release body based on the merge type
+          if [[ "$MERGE_TYPE" == "DIRECT_PUSH" ]]; then
             RELEASE_BODY=$(cat <<EOF
             ## Changes (Direct Push to Main)
             
@@ -142,7 +149,7 @@ jobs:
             )
           else
             RELEASE_BODY=$(cat <<EOF
-            ## Changes (${{ steps.pr_meta.outputs.merge_type }})
+            ## Changes ($MERGE_TYPE)
             
             **PR Title:** ${{ steps.pr_meta.outputs.title }}
             
@@ -155,6 +162,8 @@ jobs:
             EOF
             )
           fi
+      
+          # Export the release body to the environment
           echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
           echo "$RELEASE_BODY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
