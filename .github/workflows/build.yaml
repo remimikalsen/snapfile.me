@@ -82,65 +82,35 @@ jobs:
           git tag "${{ env.VERSION }}" -m "ci: release version ${{ env.VERSION }}"
           git push origin "${{ env.VERSION }}"
       
-      - name: Retrieve PR info and commits (if any)
-        id: get_pr
+      - name: Retrieve PR metadata
+        id: pr_metadata
         uses: actions/github-script@v6
+        env:
+          COMMIT_SHA: ${{ github.event.after }}
         with:
           script: |
-            const { owner, repo } = context.repo;
-            let prNumber;
-      
-            // Try to extract PR number from the commit message (works for merge commits)
-            const commitMessage = context.payload.head_commit.message;
-            const mergeMatch = commitMessage.match(/Merge pull request #(\d+)/);
-            if (mergeMatch) {
-              prNumber = parseInt(mergeMatch[1], 10);
-              core.info(`Found PR number in merge commit: ${prNumber}`);
-            } else {
-              // If not found (e.g. for squash merges), query the commit’s associated PRs.
-              const commitSHA = context.payload.after;
-              const { data: associatedPRs } = await github.request(
-                'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
-                {
-                  owner,
-                  repo,
-                  commit_sha: commitSHA,
-                  headers: {
-                    accept: 'application/vnd.github.groot-preview+json'
-                  }
-                }
-              );
-              if (associatedPRs.length > 0) {
-                prNumber = associatedPRs[0].number;
-                core.info(`Found associated PR number: ${prNumber}`);
-              }
-            }
-            
-            if (!prNumber) {
-              core.info("No associated PR found for this commit");
-              return { title: "", body: "", commit_messages: "" };
-            }
-            
-            // Get PR details
-            const prRes = await github.rest.pulls.get({
-              owner,
-              repo,
-              pull_number: prNumber
+            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: process.env.COMMIT_SHA,
+              headers: { 'X-GitHub-Api-Version': '2022-11-28' }
             });
-            const pr = prRes.data;
             
-            // Get PR commits
-            const commitsRes = await github.rest.pulls.listCommits({
-              owner,
-              repo,
-              pull_number: prNumber
+            if (prs.length === 0) return { exists: false };
+            
+            const pr = prs[0];
+            const commits = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
             });
-            const commitMessages = commitsRes.data.map(commit => commit.commit.message).join('\n');
-      
+            
             return {
+              exists: true,
               title: pr.title,
-              body: pr.body || "",
-              commit_messages: commitMessages
+              body: pr.body,
+              commits: commits.data.map(c => c.commit.message).join('\n• '),
+              merge_type: pr.merged ? 'MERGE' : pr.squash_merged ? 'SQUASH' : 'REBASE'
             };
 
       - name: Create GitHub Release
@@ -151,16 +121,18 @@ jobs:
           tag_name: ${{ env.VERSION }}
           name: "Release ${{ env.VERSION }}"
           body: |
-            ## Docker Image
-            - **Version:** `${{ env.VERSION }}`
-            - **Image:** `ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}`
+            **Summary:** ${{ steps.pr_metadata.outputs.title || 'N/A' }}  
+            **Merge Strategy:** ${{ steps.pr_metadata.outputs.merge_type }}  
       
-            **PR Title:** ${{ steps.get_pr.outputs.title }}
-            **PR Description:**
-            ${{ steps.get_pr.outputs.body }}
+            ### Commit History  
+            ${{ steps.pr_metadata.outputs.commits }}  
       
-            **Commit Messages:**
-            ${{ steps.get_pr.outputs.commit_messages }}
+            ### PR Description  
+            ${{ steps.pr_metadata.outputs.body }}  
+      
+            **Docker Image Versions:**  
+            - Production: `ghcr.io/org/image:${{ env.VERSION }}`  
+            - Major Channel: `ghcr.io/org/image:v${{ env.MAJOR }}`  
           draft: false
           prerelease: false      
 
