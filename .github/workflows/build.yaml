@@ -81,37 +81,52 @@ jobs:
           # Create and push the new tag
           git tag "${{ env.VERSION }}" -m "ci: release version ${{ env.VERSION }}"
           git push origin "${{ env.VERSION }}"
+
+      - name: Resolve true commit SHA
+        id: sha_resolver
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            ACTUAL_SHA=$(git log --merges --pretty=format:%H -1 | xargs -I{} git show {} --no-patch --format=%P | cut -d' ' -f2)
+            echo "TRUE_SHA=${ACTUAL_SHA:-${{ github.sha }}}" >> $GITHUB_OUTPUT
+          else
+            echo "TRUE_SHA=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
       
-      - name: Retrieve PR metadata
-        id: pr_metadata
-        uses: actions/github-script@v6
-        env:
-          COMMIT_SHA: ${{ github.event.after }}
+      - name: Get PR metadata
+        uses: 8BitJonny/gh-get-current-pr@v3.0.0
+        id: pr_meta
         with:
-          script: |
-            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: process.env.COMMIT_SHA,
-              headers: { 'X-GitHub-Api-Version': '2022-11-28' }
-            });
-            
-            if (prs.length === 0) return { exists: false };
-            
-            const pr = prs[0];
-            const commits = await github.rest.pulls.listCommits({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pr.number
-            });
-            
-            return {
-              exists: true,
-              title: pr.title,
-              body: pr.body,
-              commits: commits.data.map(c => c.commit.message).join('\n• '),
-              merge_type: pr.merged ? 'MERGE' : pr.squash_merged ? 'SQUASH' : 'REBASE'
-            };
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          sha: ${{ steps.sha_resolver.outputs.TRUE_SHA }}
+          filter-out-closed: true
+      
+      - name: Get commit messages
+        run: |
+          if [[ "${{ steps.pr_meta.outputs.merge_type }}" == "SQUASH" ]]; then
+            gh pr view ${{ steps.pr_meta.outputs.number }} --json commits --jq '.commits[].message' > commits.txt
+          else
+            git log --pretty=format:%s ${{ github.event.before }}..${{ github.sha }} > commits.txt
+          fi
+          echo "COMMITS=$(cat commits.txt)" >> $GITHUB_OUTPUT
+      
+      - name: Compile release notes
+        run: |
+          RELEASE_BODY=$(cat <<EOF
+          ## Changes (${{ steps.pr_meta.outputs.merge_type }})
+          
+          **PR Title:** ${{ steps.pr_meta.outputs.title }}
+          
+          ### Commit Summary
+          $(awk '{print "• " $0}' commits.txt)
+          
+          ### Docker Tags
+          - Stable: ghcr.io/repo:${{ env.VERSION }}
+          - Major: ghcr.io/repo:v${{ env.MAJOR }}
+          EOF
+          )
+          echo "BODY<<EOF" >> $GITHUB_ENV
+          echo "$RELEASE_BODY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -120,19 +135,7 @@ jobs:
         with:
           tag_name: ${{ env.VERSION }}
           name: "Release ${{ env.VERSION }}"
-          body: |
-            **Summary:** ${{ steps.pr_metadata.outputs.title || 'N/A' }}  
-            **Merge Strategy:** ${{ steps.pr_metadata.outputs.merge_type }}  
-      
-            ### Commit History  
-            ${{ steps.pr_metadata.outputs.commits }}  
-      
-            ### PR Description  
-            ${{ steps.pr_metadata.outputs.body }}  
-      
-            **Docker Image Versions:**  
-            - Production: `ghcr.io/org/image:${{ env.VERSION }}`  
-            - Major Channel: `ghcr.io/org/image:v${{ env.MAJOR }}`  
+          body: ${{ env.RELEASE_BODY }}
           draft: false
           prerelease: false      
 
