@@ -99,32 +99,57 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           sha: ${{ steps.sha_resolver.outputs.TRUE_SHA }}
       
-      - name: Get commit messages
+      - name: Check if PR was squashed
+        id: check_squash
         run: |
-          if [[ "${{ steps.pr_meta.outputs.merge_type }}" == "SQUASH" ]]; then
-            gh pr view ${{ steps.pr_meta.outputs.number }} --json commits --jq '.commits[].message' > commits.txt
+          # Get the number of commits in the PR
+          COMMIT_COUNT=$(gh pr view ${{ steps.pr_meta.outputs.number }} --json commits --jq '.commits | length')
+          echo "Commit count: $COMMIT_COUNT"
+
+          # If there's only one commit, assume it's a squash merge
+          if [[ "$COMMIT_COUNT" -eq 1 ]]; then
+            echo "SQUASH_MERGE=true" >> $GITHUB_ENV
           else
-            git log --pretty=format:%s ${{ github.event.before }}..${{ github.sha }} > commits.txt
+            echo "SQUASH_MERGE=false" >> $GITHUB_ENV
+          fi
+
+      - name: Get commit messages with SHAs
+        run: |
+          if [[ "$SQUASH_MERGE" == "true" ]]; then
+            # For squash merges, get the commit message from the PR
+            gh pr view ${{ steps.pr_meta.outputs.number }} --json commits --jq '.commits[0].message + " (" + .commits[0].oid[0:7] + ")"' > commits.txt
+          else
+            # For regular merges, get all commit messages in the range
+            git log --pretty=format:"%s (%h)" ${{ github.event.before }}..${{ github.sha }} > commits.txt
           fi
                   
       - name: Compile release notes
         run: |
+          # Conditionally include the Summary section
+          if [[ -n "${{ steps.pr_meta.outputs.pr_body }}" ]]; then
+            SUMMARY_SECTION=$(cat <<EOF
+            
+            ### Summary
+            ${{ steps.pr_meta.outputs.pr_body }}
+            EOF
+            )
+          else
+            SUMMARY_SECTION=""
+          fi
 
           RELEASE_BODY=$(cat <<EOF
-          # ${{ steps.pr_meta.outputs.pr_title }}
+          ## ${{ steps.pr_meta.outputs.pr_title }}
+          $SUMMARY_SECTION
 
-          ## Summary
-          ${{ steps.pr_meta.outputs.pr_body }}
-          
-          ## Changes
+          ### Changes
           $(awk '{print "• " $0}' commits.txt)
-          
-          ## Docker Tags
-          - Stable: ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}
-          - Major: ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}
+
+          ### Docker Tags
+          - Stable: [ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}](https://ghcr.io/remimikalsen/snapfile:${{ env.VERSION }})
+          - Major: [ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}](https://ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }})
           EOF
           )
-      
+
           # Export the release body to the environment
           echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
           echo "$RELEASE_BODY" >> $GITHUB_ENV
