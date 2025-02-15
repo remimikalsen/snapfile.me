@@ -93,7 +93,7 @@ jobs:
           fi
       
       - name: Get PR metadata
-        uses: 8BitJonny/gh-get-current-pr@v3.0.0
+        uses: 8BitJonny/gh-get-current-pr@3.0.0
         id: pr_meta
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
