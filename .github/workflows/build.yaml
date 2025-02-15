@@ -1,4 +1,4 @@
-name: Build and Deploy
+name: Build, Tag, and Release
 
 on:
   push:
@@ -12,24 +12,22 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  
+          fetch-depth: 0  # Ensure all refs & tags are fetched
 
       - name: Determine next version from last tag
         id: semver
         run: |
-          # Fetch all tags explicitly
+          # Fetch all tags (sometimes needed explicitly)
           git fetch --tags --prune
 
-          # Get the latest tag (fallback if no tags yet, "0.0.0")
+          # Get the latest tag, or 0.0.0 if none
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
-
-          echo "Latest tag is: $LATEST_TAG"
+          echo "Latest tag: $LATEST_TAG"
 
           MAJOR=$(echo "$LATEST_TAG" | cut -d '.' -f 1)
           MINOR=$(echo "$LATEST_TAG" | cut -d '.' -f 2)
           PATCH=$(echo "$LATEST_TAG" | cut -d '.' -f 3)
 
-          # Default to a patch bump
           NEXT_MAJOR=$MAJOR
           NEXT_MINOR=$MINOR
           NEXT_PATCH=$((PATCH + 1))
@@ -45,8 +43,9 @@ jobs:
           fi
 
           NEXT_VERSION="${NEXT_MAJOR}.${NEXT_MINOR}.${NEXT_PATCH}"
-
           echo "Computed next version: $NEXT_VERSION"
+
+          # Export variables
           echo "VERSION=$NEXT_VERSION" >> $GITHUB_ENV
           echo "MAJOR=$NEXT_MAJOR" >> $GITHUB_ENV
 
@@ -82,6 +81,38 @@ jobs:
           # Create and push the new tag
           git tag "${{ env.VERSION }}" -m "ci: release version ${{ env.VERSION }}"
           git push origin "${{ env.VERSION }}"
+
+      - name: Retrieve PR body (if any)
+        id: get_pr
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // Attempt to find any pull requests associated with this commit
+            const commitSHA = context.sha;
+            const { owner, repo } = context.repo;
+            const pulls = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner,
+              repo,
+              commit_sha: commitSHA
+            });
+
+            if (pulls.data.length > 0) {
+              // Use the first PR found
+              return { body: pulls.data[0].body || "" };
+            } else {
+              return { body: "" };
+            }
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.VERSION }}
+          release_name: "Release ${{ env.VERSION }}"
+          body: ${{ steps.get_pr.outputs.body }}
+          draft: false
+          prerelease: false
 
       - name: Trigger production update
         run: |
