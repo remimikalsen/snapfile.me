@@ -137,27 +137,26 @@ jobs:
           # Conditionally include the Summary section
           if [[ -n "${{ steps.pr_meta.outputs.pr_body }}" ]]; then
             SUMMARY_SECTION=$(cat <<EOF
-            
-            ### Summary
-            ${{ steps.pr_meta.outputs.pr_body }}
-            EOF
-            )
+### Summary
+${{ steps.pr_meta.outputs.pr_body }}
+EOF
+)
           else
             SUMMARY_SECTION=""
           fi
 
           RELEASE_BODY=$(cat <<EOF
-          ## ${{ steps.pr_meta.outputs.pr_title }}
-          $SUMMARY_SECTION
+## ${{ steps.pr_meta.outputs.pr_title }}
+$SUMMARY_SECTION
 
-          ### Changes
-          $(awk '{print "• " $0}' commits.txt)
+### Changes
+$(awk '{print "• " $0}' commits.txt)
 
-          ### Docker Tags
-          - Stable: [ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}](https://ghcr.io/remimikalsen/snapfile:${{ env.VERSION }})
-          - Major: [ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}](https://ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }})
-          EOF
-          )
+### Docker Tags
+- Stable: [ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}](https://ghcr.io/remimikalsen/snapfile:${{ env.VERSION }})
+- Major: [ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}](https://ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }})
+EOF
+)
 
           # Export the release body to the environment
           echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
