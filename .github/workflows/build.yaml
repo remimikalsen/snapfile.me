@@ -11,31 +11,42 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  
 
-      - name: Determine next version
+      - name: Determine next version from last tag
         id: semver
         run: |
-          CURRENT_VERSION=$(cat VERSION)
-          
-          MAJOR=$(echo $CURRENT_VERSION | cut -d '.' -f 1)
-          MINOR=$(echo $CURRENT_VERSION | cut -d '.' -f 2)
-          PATCH=$(echo $CURRENT_VERSION | cut -d '.' -f 3)
+          # Fetch all tags explicitly
+          git fetch --tags --prune
 
+          # Get the latest tag (fallback if no tags yet, "0.0.0")
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+
+          echo "Latest tag is: $LATEST_TAG"
+
+          MAJOR=$(echo "$LATEST_TAG" | cut -d '.' -f 1)
+          MINOR=$(echo "$LATEST_TAG" | cut -d '.' -f 2)
+          PATCH=$(echo "$LATEST_TAG" | cut -d '.' -f 3)
+
+          # Default to a patch bump
           NEXT_MAJOR=$MAJOR
           NEXT_MINOR=$MINOR
-          NEXT_PATCH=$((PATCH+1))
+          NEXT_PATCH=$((PATCH + 1))
 
+          # Check commit message for [major] or [minor]
           if [[ "${{ github.event.head_commit.message }}" =~ \[major\] ]]; then
-            NEXT_MAJOR=$((MAJOR+1))
+            NEXT_MAJOR=$((MAJOR + 1))
             NEXT_MINOR=0
             NEXT_PATCH=0
           elif [[ "${{ github.event.head_commit.message }}" =~ \[minor\] ]]; then
-            NEXT_MINOR=$((MINOR+1))
+            NEXT_MINOR=$((MINOR + 1))
             NEXT_PATCH=0
           fi
 
           NEXT_VERSION="${NEXT_MAJOR}.${NEXT_MINOR}.${NEXT_PATCH}"
-          echo "$NEXT_VERSION" > VERSION
+
+          echo "Computed next version: $NEXT_VERSION"
           echo "VERSION=$NEXT_VERSION" >> $GITHUB_ENV
           echo "MAJOR=$NEXT_MAJOR" >> $GITHUB_ENV
 
@@ -61,22 +72,16 @@ jobs:
         run: |
           docker push ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}
           docker push ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}
-      
-      - name: Commit updated VERSION file
+
+      - name: Push new Git tag
         run: |
           # Configure Git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-      
-          # Ensure we're on 'main' branch
-          git checkout main
-      
-          # Stage and commit the updated VERSION file
-          git add VERSION
-          git commit -m "ci: bump version to ${{ env.VERSION }} [skip ci]" || echo "Just updating the VERSION file."
-      
-          # Push the change back to GitHub
-          git push origin HEAD:main
+
+          # Create and push the new tag
+          git tag "${{ env.VERSION }}" -m "ci: release version ${{ env.VERSION }}"
+          git push origin "${{ env.VERSION }}"
 
       - name: Trigger production update
         run: |
