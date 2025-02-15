@@ -98,7 +98,12 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           sha: ${{ steps.sha_resolver.outputs.TRUE_SHA }}
-          filterOutClosed: true
+          
+      - name: Debug PR Metadata
+        run: |
+          echo "Merge Type: ${{ steps.pr_meta.outputs.merge_type }}"
+          echo "PR Title: ${{ steps.pr_meta.outputs.title }}"
+          echo "PR Number: ${{ steps.pr_meta.outputs.number }}"
       
       - name: Set fallback PR metadata if no PR is found
         if: steps.pr_meta.outputs.number == ''
@@ -107,12 +112,6 @@ jobs:
           echo "merge_type=DIRECT_PUSH" >> $GITHUB_OUTPUT
           echo "title=Direct push to main" >> $GITHUB_OUTPUT
           echo "number=0" >> $GITHUB_OUTPUT
-      
-      - name: Debug PR Metadata
-        run: |
-          echo "Merge Type: ${{ steps.pr_meta.outputs.merge_type }}"
-          echo "PR Title: ${{ steps.pr_meta.outputs.title }}"
-          echo "PR Number: ${{ steps.pr_meta.outputs.number }}"
       
       - name: Get commit messages
         run: |
@@ -125,7 +124,7 @@ jobs:
       - name: Debug commits.txt
         run: |
           cat commits.txt
-            
+                  
       - name: Compile release notes
         run: |
           # Set a default merge type if the output is empty
