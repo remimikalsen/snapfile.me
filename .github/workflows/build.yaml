@@ -81,53 +81,67 @@ jobs:
           # Create and push the new tag
           git tag "${{ env.VERSION }}" -m "ci: release version ${{ env.VERSION }}"
           git push origin "${{ env.VERSION }}"
-
-      - name: Retrieve PR body and commits (if any)
+      
+      - name: Retrieve PR info and commits (if any)
         id: get_pr
         uses: actions/github-script@v6
         with:
           script: |
             const { owner, repo } = context.repo;
-            const branchName = context.ref.replace('refs/heads/', '');
-
-            // Find the most recently closed PR that was merged into main
-            const prs = await github.rest.pulls.list({
+            let prNumber;
+      
+            // Try to extract PR number from the commit message (works for merge commits)
+            const commitMessage = context.payload.head_commit.message;
+            const mergeMatch = commitMessage.match(/Merge pull request #(\d+)/);
+            if (mergeMatch) {
+              prNumber = parseInt(mergeMatch[1], 10);
+              core.info(`Found PR number in merge commit: ${prNumber}`);
+            } else {
+              // If not found (e.g. for squash merges), query the commit’s associated PRs.
+              const commitSHA = context.payload.after;
+              const { data: associatedPRs } = await github.request(
+                'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
+                {
+                  owner,
+                  repo,
+                  commit_sha: commitSHA,
+                  headers: {
+                    accept: 'application/vnd.github.groot-preview+json'
+                  }
+                }
+              );
+              if (associatedPRs.length > 0) {
+                prNumber = associatedPRs[0].number;
+                core.info(`Found associated PR number: ${prNumber}`);
+              }
+            }
+            
+            if (!prNumber) {
+              core.info("No associated PR found for this commit");
+              return { title: "", body: "", commit_messages: "" };
+            }
+            
+            // Get PR details
+            const prRes = await github.rest.pulls.get({
               owner,
               repo,
-              state: 'closed',
-              base: 'main', // Look for PRs targeting the main branch
-              sort: 'updated',
-              direction: 'desc',
-              per_page: 1
+              pull_number: prNumber
             });
-
-            let pr = null;
-            if (prs.data.length > 0) {
-              pr = prs.data[0];
-            }
-
-            if (pr) {
-              // Fetch commits from the PR
-              const commits = await github.rest.pulls.listCommits({
-                owner,
-                repo,
-                pull_number: pr.number
-              });
-
-              const commitMessages = commits.data.map(commit => commit.commit.message).join('\n');
-
-              return {
-                title: pr.title,
-                body: pr.body || "",
-                commit_messages: commitMessages
-              };
-            } else {
-              return {
-                title: "",
-                body: "",
-                commit_messages: ""
-              };
-            }
+            const pr = prRes.data;
+            
+            // Get PR commits
+            const commitsRes = await github.rest.pulls.listCommits({
+              owner,
+              repo,
+              pull_number: prNumber
+            });
+            const commitMessages = commitsRes.data.map(commit => commit.commit.message).join('\n');
+      
+            return {
+              title: pr.title,
+              body: pr.body || "",
+              commit_messages: commitMessages
+            };
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -140,16 +154,15 @@ jobs:
             ## Docker Image
             - **Version:** `${{ env.VERSION }}`
             - **Image:** `ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}`
-
-            ## Changes
+      
             **PR Title:** ${{ steps.get_pr.outputs.title }}
             **PR Description:**
             ${{ steps.get_pr.outputs.body }}
-
+      
             **Commit Messages:**
             ${{ steps.get_pr.outputs.commit_messages }}
           draft: false
-          prerelease: false
+          prerelease: false      
 
       - name: Trigger production update
         run: |
