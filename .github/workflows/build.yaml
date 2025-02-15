@@ -88,31 +88,22 @@ jobs:
         with:
           script: |
             const { owner, repo } = context.repo;
-            const commitSHA = context.sha;
+            const branchName = context.ref.replace('refs/heads/', '');
 
-            // Find the PR associated with the commit
-            const pulls = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+            // Find the most recently closed PR that was merged into main
+            const prs = await github.rest.pulls.list({
               owner,
               repo,
-              commit_sha: commitSHA
+              state: 'closed',
+              base: 'main', // Look for PRs targeting the main branch
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 1
             });
 
             let pr = null;
-            if (pulls.data.length > 0) {
-              pr = pulls.data[0];
-            } else {
-              // If no PR is found, try to find the PR by the branch name
-              const branchName = context.ref.replace('refs/heads/', '');
-              const prs = await github.rest.pulls.list({
-                owner,
-                repo,
-                state: 'closed',
-                sort: 'updated',
-                direction: 'desc',
-                per_page: 1
-              });
-
-              pr = prs.data.find(p => p.head.ref === branchName);
+            if (prs.data.length > 0) {
+              pr = prs.data[0];
             }
 
             if (pr) {
