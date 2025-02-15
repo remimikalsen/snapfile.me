@@ -98,7 +98,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           sha: ${{ steps.sha_resolver.outputs.TRUE_SHA }}
-          filterOutClosed: true
+          filterOutClosed: false
       
       - name: Get commit messages
         run: |
