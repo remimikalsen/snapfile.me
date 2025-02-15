@@ -107,6 +107,10 @@ jobs:
           else
             git log --pretty=format:%s ${{ github.event.before }}..${{ github.sha }} > commits.txt
           fi
+          
+      - name: Validate commits.txt exists
+        run: |
+          cat commits.txt
       
       - name: Compile release notes
         run: |
@@ -123,10 +127,10 @@ jobs:
           - Major: ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}
           EOF
           )
-          echo "BODY<<EOF" >> $GITHUB_ENV
+          echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
           echo "$RELEASE_BODY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
-
+      
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         env:
@@ -136,7 +140,7 @@ jobs:
           name: "Release ${{ env.VERSION }}"
           body: ${{ env.RELEASE_BODY }}
           draft: false
-          prerelease: false      
+          prerelease: false    
 
       - name: Trigger production update
         run: |
