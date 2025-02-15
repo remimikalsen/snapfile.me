@@ -102,12 +102,15 @@ jobs:
       - name: Check if PR was squashed
         id: check_squash
         run: |
-          # Get the number of commits in the PR
-          COMMIT_COUNT=$(gh pr view ${{ steps.pr_meta.outputs.number }} --json commits --jq '.commits | length')
-          echo "Commit count: $COMMIT_COUNT"
+          # Fetch PR commits using GitHub API
+          PR_COMMITS=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ steps.pr_meta.outputs.number }}/commits" | jq length)
+
+          echo "Commit count: $PR_COMMITS"
 
           # If there's only one commit, assume it's a squash merge
-          if [[ "$COMMIT_COUNT" -eq 1 ]]; then
+          if [[ "$PR_COMMITS" -eq 1 ]]; then
             echo "SQUASH_MERGE=true" >> $GITHUB_ENV
           else
             echo "SQUASH_MERGE=false" >> $GITHUB_ENV
@@ -116,8 +119,12 @@ jobs:
       - name: Get commit messages with SHAs
         run: |
           if [[ "$SQUASH_MERGE" == "true" ]]; then
-            # For squash merges, get the commit message from the PR
-            gh pr view ${{ steps.pr_meta.outputs.number }} --json commits --jq '.commits[0].message + " (" + .commits[0].oid[0:7] + ")"' > commits.txt
+            # For squash merges, get the commit message from the PR using curl and Python
+            response=$(curl -s \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/pulls/${{ steps.pr_meta.outputs.number }}/commits")
+            echo "$response" | python3 -c "import sys, json; d = json.load(sys.stdin)[0]; print(f\"{d['commit']['message']} ({d['sha'][:7]})\")" > commits.txt
           else
             # For regular merges, get all commit messages in the range
             git log --pretty=format:"%s (%h)" ${{ github.event.before }}..${{ github.sha }} > commits.txt
