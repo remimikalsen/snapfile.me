@@ -131,40 +131,29 @@ jobs:
             # For regular merges, get all commit messages in the range
             git log --pretty=format:"%s (%h)" ${{ github.event.before }}..${{ github.sha }} > commits.txt
           fi
-                  
-      - name: Compile release notes
+
+      - name: Build release notes file
         run: |
-          # Conditionally include the Summary section
+          # Create a file for the release notes.
+          # Title from the PR:
+          echo "## ${{ steps.pr_meta.outputs.pr_title }}" > release_body.md
+
+          # Conditionally add a "Summary" section if there's a PR body.
           if [[ -n "${{ steps.pr_meta.outputs.pr_body }}" ]]; then
-            SUMMARY_SECTION=$(cat <<-EOF
-          ### Summary
-          ${{ steps.pr_meta.outputs.pr_body }}
-          EOF
-          )
-          else
-          SUMMARY_SECTION=""
+            echo "" >> release_body.md
+            echo "### Summary" >> release_body.md
+            echo "${{ steps.pr_meta.outputs.pr_body }}" >> release_body.md
           fi
-      
-          RELEASE_BODY=$(cat <<-EOF
-          ## ${{ steps.pr_meta.outputs.pr_title }}
-          $SUMMARY_SECTION
-      
-          ### Changes
-          $(awk '{print "• " $0}' commits.txt)
-      
-          ### Docker Tags
-          - Stable: [ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}](https://ghcr.io/remimikalsen/snapfile:${{ env.VERSION }})
-          - Major: [ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}](https://ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }})
-            EOF
-          )
-      
-          # Export the release body to the environment
-          echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
-          echo "$RELEASE_BODY" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
 
+          echo "" >> release_body.md
+          echo "### Changes" >> release_body.md
+          awk '{print "• " $0}' commits.txt >> release_body.md
 
-      
+          echo "" >> release_body.md
+          echo "### Docker Tags" >> release_body.md
+          echo "- Stable: [ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}](https://ghcr.io/remimikalsen/snapfile:${{ env.VERSION }})" >> release_body.md
+          echo "- Major: [ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}](https://ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }})" >> release_body.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         env:
@@ -172,9 +161,10 @@ jobs:
         with:
           tag_name: ${{ env.VERSION }}
           name: "Release ${{ env.VERSION }}"
-          body: ${{ env.RELEASE_BODY }}
+          body_path: release_body.md
           draft: false
-          prerelease: false    
+          prerelease: false
+
 
       - name: Trigger production update
         run: |
