@@ -3,10 +3,10 @@ services:
   snapfile:
     restart: unless-stopped
     container_name: snapfile
-    image: ghcr.io/remimikalsen/snapfile:v1
-    #build: 
-    #  context: .
-    #  dockerfile: Dockerfile.snapfile
+    #image: ghcr.io/remimikalsen/snapfile:v1
+    build: 
+      context: .
+      dockerfile: Dockerfile.snapfile
     ports:
       - "8080:8080"
     environment:

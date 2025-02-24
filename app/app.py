@@ -350,7 +350,7 @@ def check_database_file_consistency():
     conn.commit()
     conn.close()
 
-def create_app(purge_interval_minutes=PURGE_INTERVAL_MINUTES, consistency_check_interval_minutes=CONSISTENCY_CHECK_INTERVAL_MINUTES):
+async def create_app(purge_interval_minutes=PURGE_INTERVAL_MINUTES, consistency_check_interval_minutes=CONSISTENCY_CHECK_INTERVAL_MINUTES):
     app = web.Application()
     
     # Setup Jinja2 with the application key

@@ -146,3 +146,23 @@ Visit http://localhost:8080
 
 ## Developer notes
 This app is set up with automatic versioning with git tags, Docker image deployment and app deployment. That's nice to know if you fork it! Read about [building and deploying automatically](https://theawesomegarage.com/blog/build-and-deploy-locally-using-github-actions-and-webhooks).
+
+
+### Python dependencies
+
+Set up a Python virtual environment for local development to manage Python package versions correctly:
+
+- `pip-tools` is used to compile canonical requirements in `requirements.in`.
+- `requirements.txt` is generated using:
+
+  ```sh
+  pip-compile requirements.in
+  ```
+
+- To upgrade `requirements.txt`, run:
+
+  ```sh
+  pip-compile --upgrade requirements.in
+  pip install -r requirements.txt
+  pip-sync requirements.txt
+  ```
