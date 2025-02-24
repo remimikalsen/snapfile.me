@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SnapFile.me{% endblock %}</title>
+    <link rel="icon" href="/static/favicon.png" type="image/png">
+    <link rel="stylesheet" href="/static/css/styles.css">
+
+    <meta property="og:title" content="SnapFile.me">
+    <meta property="og:description" content="Simple and secure file sharing">
+    <meta property="og:image" content="/static/favicon.png">
+    <meta property="og:url" content="https://snapfile.me">
+
+    {% block extra_head %}{% endblock %}
+    {{ ANALYTICS_SCRIPT|safe }}
+</head>
+<body>
+    <header>
+        <a href="/" class="logo-link"><h1>SnapFile.me</h1></a>
+        <p class="header">Simple and secure file sharing</p>
+    </header>
+    
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    
+    <footer>
+        <p>
+            Version <a href="https://github.com/remimikalsen/snapfile.me/pkgs/container/snapfile">{{ VERSION }}</a>. Brought to you by <a href="https://theawesomegarage.com" target="_blank">TheAwesomeGarage.com</a>
+        </p>
+        <p>
+            Why not try out <a href="https://credshare.app" target="_blank">CredShare.app</a>? Password sharing made simple.
+        </p>
+        <p>
+            View the source code on <a href="https://github.com/remimikalsen/snapfile.me" target="_blank">GitHub.com</a>
+        </p>
+    </footer>
+    
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
