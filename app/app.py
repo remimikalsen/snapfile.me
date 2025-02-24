@@ -12,6 +12,20 @@ import jinja2
 import hashlib
 import asyncio
 
+VERSION_FILE_PATH = os.path.join(os.path.dirname(__file__), 'VERSION')
+VERSION = "Development"
+
+if os.path.isfile(VERSION_FILE_PATH):
+    with open(VERSION_FILE_PATH, 'r') as version_file:
+        VERSION = version_file.read().strip() or "Development"
+else:
+    parent_dir_version_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'VERSION')
+    if os.path.isfile(parent_dir_version_path):
+        with open(parent_dir_version_path, 'r') as version_file:
+            VERSION = version_file.read().strip() + "-development"
+    else:
+        VERSION = "unknown"
+
 # Load configuration from environment variables
 MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 500 * 1024 * 1024))  # Default to 500 MB
 MAX_USES_QUOTA = int(os.getenv('MAX_USES_QUOTA', 5))  # Default to 5 uses per day
@@ -54,13 +68,12 @@ c.execute('''CREATE TABLE IF NOT EXISTS ip_usage
              (ip TEXT, uses INTEGER, last_access DATETIME)''')
 conn.commit()
 
-# Configure Jinja2 templating
-aiohttp_jinja2.setup(
-    app=web.Application(),
-    loader=jinja2.FileSystemLoader('./templates'),
-    app_key=APP_KEY
-)
-
+# Define a context processor to add VERSION to all templates
+async def version_context_processor(_):
+    return {
+        'VERSION': VERSION, 
+        'ANALYTICS_SCRIPT': ANALYTICS_SCRIPT
+    }
 
 def hash_ip(ip):
     return hashlib.sha256(ip.encode()).hexdigest()
@@ -112,8 +125,7 @@ async def index(request):
     context = {
         'max_file_size': int(MAX_FILE_SIZE / 1024 / 1024),
         'file_expiry_hours': file_expiry_hours,
-        'file_expiry_minutes': file_expiry_minutes,
-        'analytics_script': ANALYTICS_SCRIPT
+        'file_expiry_minutes': file_expiry_minutes
     }
     return aiohttp_jinja2.render_template('index.html', request, context, app_key=APP_KEY)
 
@@ -189,8 +201,7 @@ async def landing_page_download(request):
                 'download_link': download_link,
                 'download_code': download_code,
                 'internal_ip': INTERNAL_IP,
-                'internal_port': INTERNAL_PORT,
-                'analytics_script': ANALYTICS_SCRIPT
+                'internal_port': INTERNAL_PORT
             }
             conn.close()
             return aiohttp_jinja2.render_template('download.html', request, context, app_key=APP_KEY)
@@ -219,11 +230,11 @@ async def download_file(request):
             conn.close()
             return response
     conn.close()
-    return aiohttp_jinja2.render_template('file_not_found.html', request, {'analytics_script': ANALYTICS_SCRIPT}, app_key=APP_KEY)
+    return aiohttp_jinja2.render_template('file_not_found.html', request, {}, app_key=APP_KEY)
     
 
 async def handle_404(request):
-    return aiohttp_jinja2.render_template('404.html', request, {'analytics_script': ANALYTICS_SCRIPT}, app_key=APP_KEY)
+    return aiohttp_jinja2.render_template('404.html', request, {}, app_key=APP_KEY)
 
 async def check_limit(request):
     ip = get_client_ip(request)
@@ -346,7 +357,8 @@ def create_app(purge_interval_minutes=PURGE_INTERVAL_MINUTES, consistency_check_
     aiohttp_jinja2.setup(
         app,
         loader=jinja2.FileSystemLoader('./templates'),
-        app_key=APP_KEY
+        app_key=APP_KEY,
+        context_processors=[version_context_processor]
     )
     
     # Define routes in the correct order
