@@ -4,7 +4,7 @@
 
 # Snapfile
 
-**Snapfile is a simple and secure file sharing service.**
+**Snapfile is a simple, fast and secure file sharing service.**
 
 With Snapfile, you upload a file and get a single-use download link back. The provided link is valid for a limited amount of time. You can share the link, or use it yourself, but once you have downloaded the file, it's deleted.
 
@@ -13,6 +13,8 @@ Snapfile is anonymous, but still limits usage through hashing the client IP and 
 Snapfile doesn't by itself encrypt traffic, but it's easy enough to put it behind a reverse proxy like Nginx or Traefik. Snapfile will read the X-Forwarded-For headers to get the originating client's public IP address.
 
 Snapfile doesn't by itself encrypt the data at rest, but you may encrypt the uploads directory (ecryptfs) or the entire volume the directory is on (Luks) if you wish to increase security somewhat. Files do however have a very short life on the server.
+
+Snapfile is asynchronous by nature, allowing it to scale efficiently even on modest hardware. For additional scalability, you can deploy multiple Snapfile containers behind a load balancer.
 
 
 ## Table of Contents
