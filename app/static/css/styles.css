@@ -1,141 +1,200 @@
-body {
-    font-family: Arial, sans-serif;
-    background-color: #f4f4f4;
-    color: #333;
+/* ===========================================================
+   Theme Variables & Global Styles (Base Template)
+   =========================================================== */
+
+/* Theme Variables */
+:root {
+    --primary-color: #007acc;
+    --secondary-color: #004d80;
+    --bg-color: #f4f4f4;
+    --text-color: #333;
+    --header-bg: #fff;
+    --footer-bg: #fff;
+    --accent-color: #4caf50;
+    --border-color: #007acc;
+    --link-color: #007acc;
+  }
+  
+  body.dark {
+    --bg-color: #121212;
+    --text-color: #e0e0e0;
+    --header-bg: #1e1e1e;
+    --footer-bg: #1e1e1e;
+    --primary-color: #1e90ff;
+    --secondary-color: #87cefa;
+    --border-color: #1e90ff;
+    --accent-color: #66bb6a;
+    --link-color: #66bb6a;
+  }
+  
+  /* Global Base Styles */
+  body {
+    font-family: 'Roboto', Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
     margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-}
-
-header {
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  
+  p {
+    font-size: 1.2em;
+  }
+  
+  /* Header */
+  header {
+    position: relative;
     padding: 20px;
-    padding-top: 0;
-    padding-bottom: 0;
+    background-color: var(--header-bg);
     text-align: center;
-}
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  header h1 {
+    color: var(--primary-color);
+    font-size: 2.3em;
+    margin-bottom: 0;
+  }
+  
+  p.header {
+    margin-top: 6px;
+    color: var(--secondary-color);
+  }
+  
+  /* Dark Mode Toggle Button */
+  button#theme-toggle {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: transparent;
+    border: none;
+    font-size: 1.5em;
+    cursor: pointer;
+    background-color: var(--header-bg);
+    color: var(--primary-color);
+  }
 
-main {
+  
+  /* Main Content Area */
+  main {
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 20px;
-}
-
-@media (max-width: 600px) {
+    transition: padding 0.3s ease;
+  }
+  
+  @media (max-width: 600px) {
     main {
-        padding: 10px;
+      padding: 10px;
     }
-}
 
-p.quota-info {
-    margin: 10px;
-    font-size: 0.8em;
-    color: #333;
-    text-align: center;
-    font-weight: bold;
-}
+    /* On mobile, reset the toggle to the normal flow */
+    button#theme-toggle {
+        position: static;
+        margin-top: 10px;
+      }
 
-
-footer {
-    padding: 20px;
-}
-
-footer p {
-    text-align: center;
-    color: #333333;
-    margin: 10px;
-}
-
-footer a {
+  }
+  
+  /* Links & Typography */
+  a {
+    color: var(--link-color);
     text-decoration: none;
-    color: #004D80;
-}
-
-
-h1 {
-    color: #007acc;
-    font-size: 2.3em;
-    margin-bottom: 0;
-}
-
-p.header {
-    margin-top: 6px;
-}
-
-h2 {
-    color: #333;
+  }
+  
+  a.logo-link {
+    cursor: pointer;
+  }
+  
+  /* Footer */
+  footer {
+    padding: 20px;
+    background-color: var(--footer-bg);
+  }
+  
+  footer p {
+    text-align: center;
+    margin: 10px;
+    color: var(--text-color);
+  }
+  
+  footer a {
+    text-decoration: none;
+    color: var(--link-color);
+  }
+  
+  /* Headings */
+  h2 {
+    color: var(--text-color);
     text-align: center;
     font-size: 1.8em;
     font-weight: bold;
     margin-bottom: 20px;
-}
-
-
-p {
-    font-size: 1.2em;
-    color: #666;
-}
-
-a.logo-link {
-    text-decoration: none;
-    color: #007acc;
-    cursor: hand;
-}
-
-#upload-area {
-    background-color: #fff;
-    border: 2px dashed #007acc;
+  }
+  
+  
+  /* ===========================================================
+     Sub Template Specific Styles
+     =========================================================== */
+  
+  /* Quota Info  */
+  p.quota-info {
+    margin: 10px;
+    font-size: 0.8em;
+    color: var(--text-color);
+    text-align: center;
+    font-weight: bold;
+  }
+  
+  /* Upload Area */
+  #upload-area {
+    background-color: #ffffff18;
+    border: 2px dashed var(--border-color);
     border-radius: 8px;
-    padding: 10px;
-    padding-top: 30px;
+    padding: 30px 10px 10px;
     max-width: 500px;
     text-align: center;
     transition: background-color 0.3s ease;
     position: relative;
-}
-
-p.upload-helptext,
-#time-left {
-    font-size: 1em;
-    color: #333333;
-    text-align: center;
-    max-width: 500px;
-    padding: 0 10px;
-    margin-top: 10px;
-}
-
-#upload-area.dragover {
+  }
+  
+  #upload-area.dragover {
     background-color: #e6f7ff;
-}
-
-#upload-area.disabled {
-    background-color: #f4f4f4;
+  }
+  
+  #upload-area.disabled {
+    background-color: var(--bg-color);
     border: none;
     cursor: default;
-}
-#upload-area input[type="file"] {
+  }
+  
+  #upload-area input[type="file"] {
     display: none;
-}
-
-#upload-area label {
+  }
+  
+  #upload-area label {
     display: block;
     font-size: 1.2em;
-    color: #007acc;
+    color: var(--primary-color);
     cursor: pointer;
     margin-bottom: 20px;
     transition: color 0.3s ease;
     width: 200px;
     margin: 0 auto;
-}
-
-#upload-area button,
-#download-area button {
-    background-color: #007acc;
-    color: #fff;
+  }
+  
+  #upload-area button,
+  #download-area button {
+    background-color: var(--primary-color);
+    color: var(--header-bg);
     border: none;
     padding: 10px 20px;
     border-radius: 4px;
@@ -147,159 +206,178 @@ p.upload-helptext,
     justify-content: center;
     gap: 10px;
     width: 200px;
-}
-
-#upload-area p {
-    color: #666;
-}
-
-#upload-area button:hover {
-    background-color: #005f99;
-}
-
-#upload-area .icon {
+  }
+  
+  #upload-area p {
+    color: var(--text-color);
+  }
+  
+  #upload-area button:hover {
+    background-color: var(--secondary-color);
+  }
+  
+  #upload-area .icon {
     font-size: 2em;
-}
-
-.success-link-back, .success-link {
-    color: #005f99;
+  }
+  
+  /* Upload Help Text & Time Left */
+  p.upload-helptext,
+  #time-left {
+    font-size: 1em;
+    color: var(--text-color);
+    text-align: center;
+    max-width: 500px;
+    padding: 0 10px;
+    margin-top: 20px;
+  }
+  
+  /* Success & Status Messages */
+  .success-link-back,
+  .success-link {
+    color: var(--secondary-color);
     text-decoration: none;
-}
-
-.success-link-back:hover, .success-link:hover {
+  }
+  
+  .success-link-back:hover,
+  .success-link:hover {
     text-decoration: underline;
-}
-
-#snapfile-status {
+  }
+  
+  #snapfile-status {
     display: none;
     text-align: center;
     margin: 0 10px;
-    padding-bottom: 0px;
+    padding-bottom: 0;
     max-width: 500px;
-}
-
-#progress {
+  }
+  
+  #progress {
     font-size: 1.5em;
-    color: #007acc;
+    color: var(--primary-color);
     margin-top: 20px;
-}
-
-#progress-bar {
+  }
+  
+  #progress-bar {
     position: relative;
     width: 100%;
     background-color: #f3f3f3;
     border-radius: 5px;
     overflow: hidden;
-}
-
-#progress-bar > div {
+  }
+  
+  #progress-bar > div {
     height: 20px;
-    background-color: #4CAF50;
+    background-color: var(--accent-color);
     width: 0;
-}
-
-#progress-percentage {
+  }
+  
+  #progress-percentage {
     position: absolute;
     top: 0;
     left: 50%;
     transform: translateX(-50%);
-    color: black;
+    color: var(--text-color);
     font-weight: bold;
     line-height: 20px;
-}
-
-.success-content {
+  }
+  
+  /* Success Content */
+  .success-content {
     padding: 0 20px;
     border-radius: 5px;
     text-align: center;
-}
-
-
-.success-link {
+  }
+  
+  .success-link {
     font-weight: normal;
-}
-
-.link-back-span {
+  }
+  
+  .link-back-span {
     display: block;
-    margin: 35px 0;
-    margin-bottom: 20px;
-}
-
-.success-span-direct {
+    margin: 35px 0 20px;
+  }
+  
+  .success-span-direct {
     display: block;
     font-size: 0.8em;
-}
-
-.success-span-share {
+  }
+  
+  .success-span-share {
     font-weight: normal;
     display: block;
     margin: 10px;
-}
-
-.success-button {
-    background-color: #007acc;
+  }
+  
+  .success-button {
+    background-color: var(--primary-color);
     color: white;
     border: none;
     padding: 5px;
     border-radius: 5px;
     margin-left: 5px;
     cursor: pointer;
-    display: inline;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-}
-
-.success-button .material-icons {
+  }
+  
+  .success-button .material-icons {
     font-size: 1.5em;
-    margin: 0px;
-}
-
-.success-button:hover {
-    background-color: #005f99;
-}
-
-#success-message, #error-message {
+    margin: 0;
+  }
+  
+  .success-button:hover {
+    background-color: var(--secondary-color);
+  }
+  
+  /* Success/Error Messages */
+  #success-message,
+  #error-message {
     font-size: 1.2em;
     margin-top: 20px;
     transition: opacity 0.5s ease;
-}
-
-#error-message {
+  }
+  
+  #error-message {
     color: #a80000;
-}
-
-img.snapfile-logo {
+  }
+  
+  /* Logo Image */
+  img.snapfile-logo {
     width: 24px;
     vertical-align: middle;
     margin-right: 10px;
-}
-
-#link-copy-notification {
+  }
+  
+  /* Link Copy Notification */
+  #link-copy-notification {
     position: fixed;
     top: 20px;
     right: 20px;
-    background-color: #4CAF50; /* Green background */
-    color: white; /* White text */
-    padding: 15px; /* Padding */
-    border-radius: 5px; /* Rounded corners */
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Shadow for better visibility */
-    transition: opacity 0.5s ease-in-out; /* Smooth fade-out transition */
-    z-index: 1000; /* Ensure it appears above other elements */
-}
-
-#download-notification,
-#download-area {
+    background-color: var(--accent-color);
+    color: white;
+    padding: 15px;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: opacity 0.5s ease-in-out;
+    z-index: 1000;
+  }
+  
+  /* Download Area */
+  #download-notification,
+  #download-area {
     display: block;
     text-align: center;
     margin: 0 10px;
-    padding-bottom: 0px;
+    padding-bottom: 0;
     max-width: 500px;
-}
-
-#download-notification {
+  }
+  
+  #download-notification {
     display: none;
-}
-
-div.to-home {
+  }
+  
+  div.to-home {
     margin-bottom: 30px;
-}
+  }
+  
