@@ -4,4 +4,5 @@ pytest-aiohttp
 playwright 
 pytest-playwright
 flake8
+flake8-pyproject
 black

@@ -1,26 +1,28 @@
 import pytest
 from aiohttp import web
-import aiohttp_jinja2  # if needed
-import jinja2          # if needed
 
 from app import security_headers_middleware, HTTPS_ONLY, ANALYTICS_SCRIPT_CSP
+
 
 @pytest.fixture
 def minimal_app():
     # Create a minimal aiohttp app that uses only the security middleware.
     app = web.Application(middlewares=[security_headers_middleware])
+
     # Add a simple route that returns a basic response.
     async def handler(request):
         return web.Response(text="Hello, World!")
+
     app.router.add_get("/", handler)
     return app
+
 
 @pytest.mark.asyncio
 async def test_security_headers(aiohttp_client, minimal_app):
     # Create a test client using the minimal app.
     client = await aiohttp_client(minimal_app)
     resp = await client.get("/")
-    
+
     # Verify that the security middleware has added the expected headers.
 
     # Check the Content Security Policy header.
