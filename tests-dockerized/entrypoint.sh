@@ -16,6 +16,10 @@ if [ "$1" = "test-e2e" ]; then
 elif [ "$1" = "test-unit" ]; then
     # Just run the unit tests (that do NOT require a running server)
     pytest -m "not e2e"
+
+elif [ "$1" = "lint" ]; then
+    flake8 .    
+    
 else
     # Default: run the app as normal
     exec python app/app.py

@@ -9,7 +9,7 @@ jobs:
   check_and_test:
     runs-on: self-hosted
     steps:
-    
+
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -30,7 +30,7 @@ jobs:
 
       - name: Run linter
         run: |
-          docker run --rm snapfile-tests flake8 .
+          docker run --rm snapfile-tests lint
 
       - name: Run unit tests
         run: |
