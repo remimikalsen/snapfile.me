@@ -21,6 +21,7 @@ services:
       - INTERNAL_PORT=8080
       - ANALYTICS_SCRIPT=
       - ANALYTICS_SCRIPT_CSP=
+      - HTTPS_ONLY=false
     volumes:
       - /snapfile/uploads:/app/uploads
       - /snapfile/database:/app/database
