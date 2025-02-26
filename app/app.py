@@ -343,7 +343,7 @@ async def security_headers_middleware(request, handler):
     response = await handler(request)
     # Set Content Security Policy
     csp = (
-        "default-src 'self'; "
+        "default-src 'self' {analytics_script_csp}; "
         "script-src 'self' 'unsafe-inline' {analytics_script_csp}; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; "
         "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
