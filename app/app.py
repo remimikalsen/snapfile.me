@@ -31,6 +31,7 @@ else:
         VERSION = "unknown"
 
 # Load configuration from environment variables
+HTTPS_ONLY = os.getenv('HTTPS_ONLY', 'false').lower() == 'true' # Default to False
 MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 500 * 1024 * 1024))  # Default to 500 MB
 MAX_USES_QUOTA = int(os.getenv('MAX_USES_QUOTA', 5))                # Default to 5 uploads per day
 FILE_EXPIRY_MINUTES = int(os.getenv('FILE_EXPIRY_MINUTES', 1440))     # Default to 1440 minutes (24 hours)
@@ -40,6 +41,7 @@ CONSISTENCY_CHECK_INTERVAL_MINUTES = int(os.getenv('CONSISTENCY_CHECK_INTERVAL_M
 INTERNAL_IP = os.getenv('INTERNAL_IP', '')
 INTERNAL_PORT = os.getenv('INTERNAL_PORT', '')
 ANALYTICS_SCRIPT = os.getenv('ANALYTICS_SCRIPT', '')
+ANALYTICS_SCRIPT_CSP = os.getenv('ANALYTICS_SCRIPT_CSP', '')
 
 UPLOAD_DIR = '/app/uploads'
 DATABASE_DIR = '/app/database'
@@ -334,12 +336,38 @@ async def check_database_file_consistency():
                     pass
         await db.commit()
 
+# --- Middleware ---
+
+@web.middleware
+async def security_headers_middleware(request, handler):
+    response = await handler(request)
+    # Set Content Security Policy
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' {analytics_script_csp}; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; "
+        "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
+        "img-src 'self' data:;"
+    ).format(analytics_script_csp=ANALYTICS_SCRIPT_CSP)
+    response.headers["Content-Security-Policy"] = csp
+    # Prevent MIME type sniffing
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    # Prevent clickjacking
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    # Use HSTS if serving over HTTPS
+    if HTTPS_ONLY:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+    # Referrer information policy
+    response.headers["Referrer-Policy"] = "no-referrer-when-downgrade"
+    return response
+
+
 # --- Application Factory ---
 
 async def create_app(purge_interval_minutes=PURGE_INTERVAL_MINUTES,
                      consistency_check_interval_minutes=CONSISTENCY_CHECK_INTERVAL_MINUTES):
     await init_db()
-    app = web.Application()
+    app = web.Application(middlewares=[security_headers_middleware])
     
     aiohttp_jinja2.setup(
         app,

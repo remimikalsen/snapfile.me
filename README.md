@@ -135,6 +135,7 @@ There are ample configuration opportunities whether you run through Docker or Do
 - `INTERNAL_IP`: Internal IP address for direct download links.
 - `INTERNAL_PORT`: Internal port for direct download links.
 - `ANALYTICS_SCRIPT`: The complete script tag needed for tracking from e.g. Plausible (default: empty)
+- `ANALYTICS_SCRIPT_CSP`: If the analytics script is located on a different domain, add the domain to the CSP header; e.g. https://plausible.yourdomain.com
 
 These environment variables allow the app to be configured for different deployment scenarios and usage patterns.
 
