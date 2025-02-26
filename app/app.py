@@ -358,7 +358,7 @@ async def security_headers_middleware(request, handler):
     if HTTPS_ONLY:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
     # Referrer information policy
-    response.headers["Referrer-Policy"] = "no-referrer-when-downgrade"
+    response.headers["Referrer-Policy"] = "same-origin"
     return response
 
 
