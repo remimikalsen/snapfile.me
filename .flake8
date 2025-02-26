@@ -1,0 +1,14 @@
+[flake8]
+max-line-length = 88
+
+exclude =
+    .git,
+    __pycache__,
+    build,
+    dist,
+    venv,
+    .venv
+
+# You can selectively ignore certain error codes here (if needed):
+# For example E501 (line too long):
+ignore = E501
