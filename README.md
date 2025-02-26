@@ -126,6 +126,7 @@ docker pull ghcr.io/remimikalsen/snapfile:v1
 
 There are ample configuration opportunities whether you run through Docker or Docker Compose. Change --env variables and your local paths in the docker command or in docker-compose.yml to reflect your setup.
 
+- `HTTPS_ONLY`: Set to true to enable Strict-Transport-Security header (default: false)
 - `MAX_FILE_SIZE`: Maximum allowed file size for uploads (default: 500 MB).
 - `MAX_USES_QUOTA`: Maximum number of uploads allowed per IP address (default: 5).
 - `FILE_EXPIRY_MINUTES`: Time in minutes after which uploaded files expire (default: 1440 minutes or 24 hours).
@@ -135,7 +136,7 @@ There are ample configuration opportunities whether you run through Docker or Do
 - `INTERNAL_IP`: Internal IP address for direct download links.
 - `INTERNAL_PORT`: Internal port for direct download links.
 - `ANALYTICS_SCRIPT`: The complete script tag needed for tracking from e.g. Plausible (default: empty)
-- `ANALYTICS_SCRIPT_CSP`: If the analytics script is located on a different domain, add the domain to the CSP header; e.g. https://plausible.yourdomain.com
+- `ANALYTICS_SCRIPT_CSP`: If the analytics script is located on a different domain, add the domain to the CSP header; e.g. https://plausible.yourdomain.com (default: empty)
 
 These environment variables allow the app to be configured for different deployment scenarios and usage patterns.
 
