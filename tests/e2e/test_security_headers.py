@@ -1,11 +1,11 @@
 import pytest
-
+from playwright.sync_api import Page
 
 @pytest.mark.e2e
-def test_security_headers(page):
+def test_security_headers(page: Page, base_url: str):
 
     # Capture the response returned by page.goto.
-    response = page.goto("http://localhost:8080/", timeout=10000)
+    response = page.goto(base_url, timeout=10000)
 
     # Use the response to get headers.
     headers = response.headers

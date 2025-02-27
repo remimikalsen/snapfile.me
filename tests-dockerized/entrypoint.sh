@@ -11,6 +11,9 @@ if [ "$1" = "test-e2e" ]; then
     # Let the app bind to port 8080
     sleep 5
 
+    # Set the base URL for the tests run properly in Docker
+    export BASE_URL="http://localhost:8080"
+
     # Now run only the end-to-end tests
     cd ..
     pytest -m e2e
