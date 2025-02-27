@@ -3,7 +3,8 @@ set -e
 
 if [ "$1" = "test-e2e" ]; then
     # Spin up the app in the background
-    python app/app.py &
+    cd app
+    python app.py &
     APP_PID=$!
 
     echo "Waiting for app to start..."
@@ -11,6 +12,7 @@ if [ "$1" = "test-e2e" ]; then
     sleep 5
 
     # Now run only the end-to-end tests
+    cd ..
     pytest -m e2e
 
 elif [ "$1" = "test-unit" ]; then
@@ -22,5 +24,6 @@ elif [ "$1" = "lint" ]; then
 
 else
     # Default: run the app as normal
-    exec python app/app.py
+    cd app
+    exec python app.py
 fi
