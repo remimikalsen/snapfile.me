@@ -3,7 +3,7 @@ set -e
 
 if [ "$1" = "test-e2e" ]; then
     # Spin up the app in the background
-    python /app/app.py &
+    python app/app.py &
     APP_PID=$!
 
     echo "Waiting for app to start..."
@@ -22,5 +22,5 @@ elif [ "$1" = "lint" ]; then
 
 else
     # Default: run the app as normal
-    exec python /app/app.py
+    exec python app/app.py
 fi

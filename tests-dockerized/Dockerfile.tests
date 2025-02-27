@@ -1,10 +1,12 @@
 FROM ghcr.io/remimikalsen/python-testbed:v1 AS base
 
+WORKDIR /testbench
+
 # Prepare app
-COPY /app /app
-COPY VERSION /app
-RUN mkdir /app/uploads
-RUN mkdir /app/database
+COPY /app ./app
+COPY VERSION ./app
+RUN mkdir ./app/uploads
+RUN mkdir ./app/database
 
 # Install production dependencies
 COPY requirements.txt .
@@ -15,7 +17,7 @@ COPY requirements-dev.txt .
 RUN pip install --no-cache-dir -r requirements-dev.txt
 
 # Copy tests and test configuration
-COPY /tests /tests
+COPY /tests ./tests
 COPY pytest.ini .
 COPY pyproject.toml .
 
