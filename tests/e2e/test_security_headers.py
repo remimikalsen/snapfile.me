@@ -1,6 +1,7 @@
 import pytest
 from playwright.sync_api import Page
 
+
 @pytest.mark.e2e
 def test_security_headers(page: Page, base_url: str):
 
