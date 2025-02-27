@@ -1,3 +1,4 @@
+![Test Status](https://img.shields.io/github/actions/workflow/status/remimikalsen/snapfile.me/tests.yaml?label=tests)
 ![Build Status](https://img.shields.io/github/actions/workflow/status/remimikalsen/snapfile.me/build.yaml)
 ![License](https://img.shields.io/github/license/remimikalsen/snapfile.me)
 ![Version](https://img.shields.io/github/tag/remimikalsen/snapfile.me)
