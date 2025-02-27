@@ -12,6 +12,7 @@ COPY app/ ./app
 COPY VERSION ./app
 COPY tests/ ./tests
 COPY pytest.ini .
+COPY pyproject.toml .
 
 
 COPY tests-dockerized/entrypoint.sh /usr/local/bin/entrypoint.sh
