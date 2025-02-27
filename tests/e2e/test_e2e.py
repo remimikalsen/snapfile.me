@@ -5,7 +5,7 @@ import pytest
 def test_security_headers(page):
 
     # Capture the response returned by page.goto.
-    response = page.goto("http://127.0.0.1:8080/", timeout=10000)
+    response = page.goto("http://localhost:8080/", timeout=10000)
 
     # Use the response to get headers.
     headers = response.headers
