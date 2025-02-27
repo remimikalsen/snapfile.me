@@ -1,6 +1,6 @@
 FROM python:3.13-slim
 
-COPY ./app /app
+COPY /app /app
 COPY requirements.txt /app
 COPY VERSION /app
 

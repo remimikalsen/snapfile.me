@@ -1,0 +1,10 @@
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+skip-string-normalization = true
+
+
+[tool.flake8]
+max-line-length = 88
+ignore = ["E501"]
+exclude = ["venv"]

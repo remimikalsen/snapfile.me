@@ -1,0 +1,41 @@
+name: Code checks and testing
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check_and_test:
+    runs-on: self-hosted
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Attempt to pull testbed image for building speedup
+        run: |
+          docker pull ghcr.io/remimikalsen/python-testbed:v1 || echo "Cached image not found; will build a new one."
+
+      - name: Build testbed docker image from cache
+        run: |
+          docker build \
+            --cache-from ghcr.io/remimikalsen/python-testbed:v1 \
+            -t ghcr.io/remimikalsen/python-testbed:v1 \
+            -f tests-dockerized/Dockerfile.testbed .
+
+      - name: Build test docker image
+        run: |
+          docker build -t snapfile-tests -f tests-dockerized/Dockerfile.tests .
+
+      - name: Run linter
+        run: |
+          docker run --rm snapfile-tests lint
+
+      - name: Run unit tests
+        run: |
+          docker run --rm snapfile-tests test-unit
+
+      - name: Run E2E tests
+        run: |
+          docker run --rm snapfile-tests test-e2e

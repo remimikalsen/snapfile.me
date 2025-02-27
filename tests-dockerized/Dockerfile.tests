@@ -1,0 +1,33 @@
+FROM ghcr.io/remimikalsen/python-testbed:v1 AS base
+
+WORKDIR /testbench
+
+# Prepare app
+COPY /app ./app
+COPY VERSION ./app
+RUN mkdir ./app/uploads
+RUN mkdir ./app/database
+
+# Install production dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install dev dependencies for linting and testing
+COPY requirements-dev.txt .
+RUN pip install --no-cache-dir -r requirements-dev.txt
+
+# Copy tests and test configuration
+COPY /tests ./tests
+COPY pytest.ini .
+COPY pyproject.toml .
+
+# The entrypoint defines different ways for the app to run
+#  - docker run --rm snapfile-tests lint
+#  - docker run --rm snapfile-tests test-unit
+#  - docker run --rm snapfile-tests test-e2e
+COPY tests-dockerized/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# Default command if none
+CMD []
