@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write   # allows pushing Git tags
+  packages: write   # allows pushing to GHCR
+
 jobs:
   build-and-deploy:
     runs-on: self-hosted
@@ -63,13 +67,93 @@ jobs:
           echo "VERSION=$NEXT_VERSION" >> $GITHUB_ENV
           echo "MAJOR=$NEXT_MAJOR" >> $GITHUB_ENV
 
-      - name: Update VERSION file using deploy key
+      - name: Resolve true commit SHA
+        id: sha_resolver
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            ACTUAL_SHA=$(git log --merges --pretty=format:%H -1 | xargs -I{} git show {} --no-patch --format=%P | cut -d' ' -f2)
+            echo "TRUE_SHA=${ACTUAL_SHA:-${{ github.sha }}}" >> $GITHUB_OUTPUT
+          else
+            echo "TRUE_SHA=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+            
+      - name: Get PR metadata
+        uses: 8BitJonny/gh-get-current-pr@3.0.0
+        id: pr_meta
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          sha: ${{ steps.sha_resolver.outputs.TRUE_SHA }}
+
+      - name: Get Source Branch of the Merged PR
+        id: get_branch
+        run: |
+          PR_NUMBER=${{ steps.pr_meta.outputs.number }}
+          echo "Fetching branch name for PR #$PR_NUMBER..."
+
+          BRANCH_NAME=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER" | jq -r '.head.ref')
+
+          if [[ -z "$BRANCH_NAME" || "$BRANCH_NAME" == "null" ]]; then
+            echo "Failed to get branch name for PR #$PR_NUMBER"
+            exit 1
+          fi
+
+          echo "Branch Name: $BRANCH_NAME"
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+
+      - name: Find Last Successful Test Run for the Merged PR Branch
+        id: find_run
+        run: |
+          echo "Finding last workflow run for branch ${{ env.BRANCH_NAME }}..."
+
+          RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?event=pull_request&status=completed&per_page=10" | \
+            jq -r ".workflow_runs[] | select(.head_branch==\"${{ env.BRANCH_NAME }}\" and .name==\"Code checks and testing\") | .id" | head -n 1)
+
+          if [[ -z "$RUN_ID" ]]; then
+            echo "No workflow run found for branch ${{ env.BRANCH_NAME }}"
+            exit 1
+          fi
+
+          echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
+
+      - name: Download Coverage Artifact from Last Test Workflow
+        run: |
+          echo "Downloading artifact from workflow run ID: ${{ env.RUN_ID }}"
+
+          ARTIFACT_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ env.RUN_ID }}/artifacts"
+          ARTIFACT_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "$ARTIFACT_URL" | \
+            jq -r ".artifacts[] | select(.name==\"coverage-report-${{ steps.pr_meta.outputs.number }}\") | .id")
+
+          if [[ -z "$ARTIFACT_ID" ]]; then
+            echo "No coverage artifact found for PR #${{ steps.pr_meta.outputs.number }}"
+            exit 1
+          fi
+
+          echo "Artifact ID: $ARTIFACT_ID"
+
+          curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -L -o coverage.zip \
+            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip"
+
+          mkdir -p tests
+          unzip -o coverage.zip -d tests
+
+      - name: Update VERSION file and commit coverage artifacts
         run: |
           echo "${{ env.VERSION }}" > VERSION
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@workflow-testing"
-          git add VERSION
-          git commit -m "ci: update VERSION file to ${{ env.VERSION }} [skip ci]"
+          git config user.email "github-actions[bot]@snapfile"
+
+          # Check if coverage artifacts exist before committing
+          if [ -f "tests/coverage-badge.svg" ] && [ -f "tests/coverage.xml" ]; then
+            git add VERSION tests/coverage-badge.svg tests/coverage.xml
+            git commit -m "ci: update VERSION file to ${{ env.VERSION }} and coverage artifacts [skip ci]"
+          else
+            git add VERSION
+            git commit -m "ci: update VERSION file to ${{ env.VERSION }} [skip ci]"
+          fi
+
           git push origin main
 
       - name: Set up Docker Buildx
@@ -103,23 +187,6 @@ jobs:
           # Create and push the new tag
           git tag "${{ env.VERSION }}" -m "ci: release version ${{ env.VERSION }}"
           git push origin "${{ env.VERSION }}"
-
-      - name: Resolve true commit SHA
-        id: sha_resolver
-        run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            ACTUAL_SHA=$(git log --merges --pretty=format:%H -1 | xargs -I{} git show {} --no-patch --format=%P | cut -d' ' -f2)
-            echo "TRUE_SHA=${ACTUAL_SHA:-${{ github.sha }}}" >> $GITHUB_OUTPUT
-          else
-            echo "TRUE_SHA=${{ github.sha }}" >> $GITHUB_OUTPUT
-          fi
-            
-      - name: Get PR metadata
-        uses: 8BitJonny/gh-get-current-pr@3.0.0
-        id: pr_meta
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          sha: ${{ steps.sha_resolver.outputs.TRUE_SHA }}
         
       - name: Check if PR was squashed
         id: check_squash

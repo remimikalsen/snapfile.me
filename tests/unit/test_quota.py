@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import pytest_asyncio
 import aiosqlite
 
-from app import ip_reached_quota, init_db, MAX_USES_QUOTA, QUOTA_RENEWAL_MINUTES
+from app.app import ip_reached_quota, init_db, MAX_USES_QUOTA, QUOTA_RENEWAL_MINUTES
 
 
 # Fixture to set up a temporary database

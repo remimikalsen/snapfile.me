@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write   # allows pushing badge
+
 jobs:
   check_and_test:
     runs-on: self-hosted
@@ -22,19 +25,43 @@ jobs:
           docker build \
             --cache-from ghcr.io/remimikalsen/python-testbed:v1 \
             -t ghcr.io/remimikalsen/python-testbed:v1 \
-            -f tests-dockerized/Dockerfile.testbed .
+            -f tests-docker/Dockerfile.testbed .
 
       - name: Build test docker image
         run: |
-          docker build -t snapfile-tests -f tests-dockerized/Dockerfile.tests .
+          docker build -t snapfile-tests -f tests-docker/Dockerfile.tests .
 
       - name: Run linter
         run: |
           docker run --rm snapfile-tests lint
 
-      - name: Run unit tests
+      - name: Run unit tests and capture test coverage output
+        id: run_tests
         run: |
-          docker run --rm snapfile-tests test-unit
+          # Run the container and capture the full output
+          OUTPUT=$(docker run --rm snapfile-tests test-unit)
+          echo "$OUTPUT" > docker_output.txt
+
+          # Extract and print the pytest output
+          PYTEST_OUTPUT=$(awk '/-----BEGIN PYTEST OUTPUT-----/{flag=1; next} /-----END PYTEST OUTPUT-----/{flag=0} flag' docker_output.txt)
+          echo "-----BEGIN PYTEST OUTPUT-----"
+          echo "$PYTEST_OUTPUT"
+          echo "-----END PYTEST OUTPUT-----"
+
+          # Extract the badge SVG and store it as tests/coverage-badge.svg
+          awk '/-----BEGIN BADGE SVG-----/{flag=1; next} /-----END BADGE SVG-----/{flag=0} flag' docker_output.txt > coverage-badge.svg
+
+          # Extract the coverage XML and store it as tests/coverage.xml
+          awk '/-----BEGIN COVERAGE XML-----/{flag=1; next} /-----END COVERAGE XML-----/{flag=0} flag' docker_output.txt > coverage.xml
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ github.event.pull_request.number }}
+          path: |
+            coverage-badge.svg
+            coverage.xml
+          retention-days: 30 
 
       - name: Run E2E tests
         run: |
