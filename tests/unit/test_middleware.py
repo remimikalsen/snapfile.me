@@ -1,7 +1,7 @@
 import pytest
 from aiohttp import web
 
-from app import security_headers_middleware, HTTPS_ONLY, ANALYTICS_SCRIPT_CSP
+from app.app import security_headers_middleware, HTTPS_ONLY, ANALYTICS_SCRIPT_CSP
 
 
 @pytest.fixture

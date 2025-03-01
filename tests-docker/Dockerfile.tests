@@ -12,20 +12,15 @@ RUN mkdir ./app/database
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install dev dependencies for linting and testing
-COPY requirements-dev.txt .
-RUN pip install --no-cache-dir -r requirements-dev.txt
-
-# Copy tests and test configuration
+# Copy tests and test requirements
 COPY /tests ./tests
-COPY pytest.ini .
-COPY pyproject.toml .
+RUN pip install --no-cache-dir -r ./tests/requirements-tests.txt
 
 # The entrypoint defines different ways for the app to run
 #  - docker run --rm snapfile-tests lint
 #  - docker run --rm snapfile-tests test-unit
 #  - docker run --rm snapfile-tests test-e2e
-COPY tests-dockerized/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY tests-docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
