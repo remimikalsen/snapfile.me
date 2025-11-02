@@ -13,7 +13,7 @@
   <meta property="og:url" content="https://snapfile.me">
 
   {% block extra_head %}{% endblock %}
-  {{ ANALYTICS_SCRIPT|safe }}
+  {% if ANALYTICS_SCRIPT %}{{ ANALYTICS_SCRIPT|safe }}{% endif %}
 </head>
 <body>
   <header>

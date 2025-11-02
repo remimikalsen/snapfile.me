@@ -145,30 +145,99 @@
     }
 
     function showSuccess(data) {
-      const landingURL = `${window.location.origin}/landing${data}`;
-      const publicDownloadUrl = `${window.location.origin}${data}`;
+      // Validate and sanitize the server response (download URL path)
+      // Expected format: /download/{alphanumeric_code}
+      // Remove any characters that aren't alphanumeric, forward slash, or hyphen
+      const sanitizedPath = data.replace(/[^a-zA-Z0-9\/\-]/g, '');
+      // Validate the path format - must start with /download/ followed by alphanumeric characters
+      const downloadPathPattern = /^\/download\/[a-zA-Z0-9]+$/;
+      if (!sanitizedPath || !downloadPathPattern.test(sanitizedPath)) {
+        showError('Invalid response from server');
+        return;
+      }
 
-      successMessage.innerHTML = `
-        <div class="success-content">
-          <h2>Upload successful</h2>
-          <span>Share the <a href="${landingURL}" class="success-link">link to the download page</a>.</span>
-          <span class="success-span-share">Click the icon to copy link to clipboard:
-            <button id="copy-landing-link-button" class="success-button" aria-label="Copy landing page link to clipboard">
-              <span class="material-icons">content_copy</span>
-            </button>
-          </span>
-          <span class="success-span-direct">Or use this direct <a href="${publicDownloadUrl}" class="success-link-direct">download-once-only link</a>. The direct link is not suitable for Facebook and similar sharing, because they inspect the link before it's shared, causing the file to be registered as downloaded and then deleted.</span>
-          <span class="link-back-span">[ <a href="/" class="success-link-back">Share another file with SnapFile.me</a> ]</span>
-        </div>
-      `;
+      const landingURL = `${window.location.origin}/landing${sanitizedPath}`;
+      const publicDownloadUrl = `${window.location.origin}${sanitizedPath}`;
+
+      // Clear existing content
+      successMessage.textContent = '';
+
+      // Create success content container
+      const successContent = document.createElement('div');
+      successContent.className = 'success-content';
+
+      // Create heading
+      const h2 = document.createElement('h2');
+      h2.textContent = 'Upload successful';
+      successContent.appendChild(h2);
+
+      // Create first span with link
+      const span1 = document.createElement('span');
+      span1.textContent = 'Share the ';
+      const link1 = document.createElement('a');
+      link1.href = landingURL;
+      link1.className = 'success-link';
+      link1.textContent = 'link to the download page';
+      span1.appendChild(link1);
+      span1.appendChild(document.createTextNode('.'));
+      successContent.appendChild(span1);
+
+      // Create span with copy button
+      const span2 = document.createElement('span');
+      span2.className = 'success-span-share';
+      span2.textContent = 'Click the icon to copy link to clipboard: ';
+      const copyButton = document.createElement('button');
+      copyButton.id = 'copy-landing-link-button';
+      copyButton.className = 'success-button';
+      copyButton.setAttribute('aria-label', 'Copy landing page link to clipboard');
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'material-icons';
+      iconSpan.textContent = 'content_copy';
+      copyButton.appendChild(iconSpan);
+      span2.appendChild(copyButton);
+      successContent.appendChild(span2);
+
+      // Create span with direct download link
+      const span3 = document.createElement('span');
+      span3.className = 'success-span-direct';
+      span3.textContent = 'Or use this direct ';
+      const link2 = document.createElement('a');
+      link2.href = publicDownloadUrl;
+      link2.className = 'success-link-direct';
+      link2.textContent = 'download-once-only link';
+      span3.appendChild(link2);
+      span3.appendChild(document.createTextNode('. The direct link is not suitable for Facebook and similar sharing, because they inspect the link before it\'s shared, causing the file to be registered as downloaded and then deleted.'));
+      successContent.appendChild(span3);
+
+      // Create link back span
+      const span4 = document.createElement('span');
+      span4.className = 'link-back-span';
+      span4.textContent = '[ ';
+      const link3 = document.createElement('a');
+      link3.href = '/';
+      link3.className = 'success-link-back';
+      link3.textContent = 'Share another file with SnapFile.me';
+      span4.appendChild(link3);
+      span4.appendChild(document.createTextNode(' ]'));
+      successContent.appendChild(span4);
+
+      // Append to success message temporarily
+      successMessage.appendChild(successContent);
       successMessage.style.display = 'block';
       snapfileStatus.style.opacity = 0; // Start fading out
       setTimeout(() => {
-        snapfileStatus.innerHTML = successMessage.innerHTML;
+        // Replace all children of snapfileStatus with cloned safe content
+        // This matches the original behavior where innerHTML replaced everything
+        const clonedContent = successContent.cloneNode(true);
+        snapfileStatus.replaceChildren(clonedContent);
         snapfileStatus.style.opacity = 1; // Fade in the success message
-        document.getElementById('copy-landing-link-button').addEventListener('click', () => {
-          copyToClipboard(landingURL); // Pass the correct URL
-        });
+        // Find the button in the cloned content and attach event listener
+        const copyButton = clonedContent.querySelector('#copy-landing-link-button');
+        if (copyButton) {
+          copyButton.addEventListener('click', () => {
+            copyToClipboard(landingURL); // Pass the correct URL
+          });
+        }
         updateQuotaInfo();
       }, 500); // Wait for the fade-out to complete
     }
