@@ -1,10 +1,12 @@
 import asyncio
 import os
 import uuid
-import random
+import secrets
 import string
 import hashlib
+import re
 from datetime import datetime, timedelta
+from urllib.parse import urlparse
 
 from aiohttp import web
 import aiohttp_jinja2
@@ -50,8 +52,15 @@ CONSISTENCY_CHECK_INTERVAL_MINUTES = int(
 )
 INTERNAL_IP = os.getenv("INTERNAL_IP", "")
 INTERNAL_PORT = os.getenv("INTERNAL_PORT", "")
-ANALYTICS_SCRIPT = os.getenv("ANALYTICS_SCRIPT", "")
+ANALYTICS_SCRIPT_RAW = os.getenv("ANALYTICS_SCRIPT", "")
 ANALYTICS_SCRIPT_CSP = os.getenv("ANALYTICS_SCRIPT_CSP", "")
+
+# Whitelist of allowed analytics script domains
+# Add trusted analytics domains here (e.g., plausible.io, googletagmanager.com, etc.)
+ALLOWED_ANALYTICS_DOMAINS = os.getenv(
+    "ALLOWED_ANALYTICS_DOMAINS",
+    "plausible.remim.com,plausible.io,www.googletagmanager.com,www.google-analytics.com",
+).split(",")
 
 UPLOAD_DIR = "/app/uploads"
 DATABASE_DIR = "/app/database"
@@ -109,6 +118,118 @@ async def init_db():
         await db.commit()
 
 
+# --- Utility Functions ---
+
+
+def validate_and_sanitize_analytics_script(script_html):
+    """
+    Validate and sanitize analytics script HTML to prevent XSS attacks.
+
+    Only allows:
+    - External script tags (with src attribute)
+    - Whitelisted domains in src URLs
+    - Safe attributes: defer, async, data-* attributes
+    - No inline JavaScript
+
+    Returns sanitized script tag or empty string if invalid.
+    """
+    if not script_html or not script_html.strip():
+        return ""
+
+    # Normalize whitespace
+    script_html = script_html.strip()
+
+    # Match script tag - handles both <script ...></script> and <script .../>
+    # Pattern matches: <script [attributes]>[content]</script> or <script [attributes]/>
+    script_pattern = r"<script\s+([^>]*)>(.*?)</script>|<script\s+([^>]*?)\s*/>"
+    match = re.search(script_pattern, script_html, re.IGNORECASE | re.DOTALL)
+
+    if not match:
+        return ""
+
+    # Get attributes string (either from first match group or third)
+    attributes_str = match.group(1) or match.group(3) or ""
+    content = match.group(2) or ""
+
+    # Check for inline content - must be empty
+    if content.strip():
+        return ""  # Inline JavaScript not allowed
+
+    # Extract src attribute value
+    src_match = re.search(
+        r'src\s*=\s*["\']([^"\']+)["\']', attributes_str, re.IGNORECASE
+    )
+    if not src_match:
+        return ""  # Must have src attribute
+
+    src_url = src_match.group(1)
+
+    # Validate URL and extract domain
+    try:
+        parsed_url = urlparse(src_url)
+        if parsed_url.scheme not in ("http", "https"):
+            return ""  # Only allow http/https
+
+        domain = parsed_url.netloc.lower()
+        if not domain:
+            return ""
+
+        # Check if domain is in whitelist
+        domain_allowed = False
+        for allowed_domain in ALLOWED_ANALYTICS_DOMAINS:
+            allowed_domain = allowed_domain.strip().lower()
+            if not allowed_domain:
+                continue
+            # Allow exact match or subdomain match (e.g., subdomain.plausible.remim.com matches plausible.remim.com)
+            if domain == allowed_domain or domain.endswith("." + allowed_domain):
+                domain_allowed = True
+                break
+
+        if not domain_allowed:
+            return ""  # Domain not in whitelist
+    except Exception:
+        return ""  # Invalid URL
+
+    # Collect safe attributes
+    safe_attributes = []
+
+    # Extract src attribute first
+    safe_attributes.append(f'src="{src_url}"')
+
+    # Extract other attributes
+    # Match attributes: key="value" or key='value' or key (boolean attributes)
+    attr_pattern = r'(\w+(?:-\w+)*)\s*=\s*["\']([^"\']+)["\']|(\w+(?:-\w+)*)(?=\s|$)'
+    for attr_match in re.finditer(attr_pattern, attributes_str, re.IGNORECASE):
+        attr_name = (attr_match.group(1) or attr_match.group(3) or "").lower()
+        attr_value = attr_match.group(2) or ""
+
+        # Skip src as we've already added it
+        if attr_name == "src":
+            continue
+
+        # Check if attribute is allowed
+        if attr_name in ("defer", "async"):
+            # Boolean attributes - add without value
+            safe_attributes.append(attr_name)
+        elif attr_name.startswith("data-"):
+            # Data attributes are allowed (e.g., data-domain)
+            # Sanitize value to prevent XSS - remove any HTML/script tags and quotes
+            sanitized_value = re.sub(r'[<>"\']', "", attr_value)
+            # Get original attribute name (preserve case for data-* attributes)
+            orig_attr_name = attr_match.group(1) or attr_match.group(3) or attr_name
+            safe_attributes.append(f'{orig_attr_name}="{sanitized_value}"')
+
+    # Build sanitized script tag
+    attrs_str = " ".join(safe_attributes)
+    sanitized_script = f"<script {attrs_str}></script>"
+
+    return sanitized_script
+
+
+# Sanitize analytics script
+ANALYTICS_SCRIPT = validate_and_sanitize_analytics_script(ANALYTICS_SCRIPT_RAW)
+
+
 # --- Context Processors for Templates ---
 
 
@@ -155,9 +276,9 @@ async def ip_reached_quota(ip):
 
 
 def generate_download_code(length=12):
-    """Generate a random download code."""
+    """Generate a cryptographically secure random download code."""
     characters = string.ascii_letters + string.digits
-    return "".join(random.choice(characters) for i in range(length))
+    return "".join(secrets.choice(characters) for i in range(length))
 
 
 # --- Request Handlers ---

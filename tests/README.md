@@ -6,7 +6,7 @@
 
 - To run tests, install dev-requirements and:
   - `pytest -m "e2e"` for Playwright tests; but make sure your app is running on localhost:8080 first.
-  - `pytest -m "no e2e"` for Unit tests. The app doesn't need to run
+  - `pytest -m "not e2e"` for Unit tests. The app doesn't need to run
 
 - You will get automatic coverage reports when running pytest
 
