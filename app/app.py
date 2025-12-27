@@ -56,13 +56,19 @@ ALLOWED_ANALYTICS_DOMAINS = os.getenv(
     "plausible.remim.com,plausible.io,www.googletagmanager.com,www.google-analytics.com",
 ).split(",")
 
-UPLOAD_DIR = "/app/uploads"
-DATABASE_DIR = "/app/database"
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/app/uploads")
+DATABASE_DIR = os.getenv("DATABASE_DIR", "/app/database")
 DATABASE_PATH = os.path.join(DATABASE_DIR, "file_links.db")
 APP_KEY = "aiohttp_jinja2_environment"
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(DATABASE_DIR, exist_ok=True)
+# Create directories if they don't exist (skip if permission denied, e.g., in CI)
+try:
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    os.makedirs(DATABASE_DIR, exist_ok=True)
+except (PermissionError, OSError):
+    # In test environments or CI, directories may not be creatable at import time
+    # They will be created when needed or via environment variables
+    pass
 
 # --- Adapter and converter for datetime ---
 
@@ -98,6 +104,11 @@ async def async_listdir(path):
 
 async def init_db():
     """Initialize the database and create tables if they do not exist."""
+    # Ensure database directory exists
+    try:
+        os.makedirs(DATABASE_DIR, exist_ok=True)
+    except (PermissionError, OSError):
+        pass  # May fail in test environments, but database will be created in tmp_path
     async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
         await db.execute(
             """CREATE TABLE IF NOT EXISTS files
@@ -591,6 +602,12 @@ async def create_app(
     purge_interval_minutes=PURGE_INTERVAL_MINUTES,
     consistency_check_interval_minutes=CONSISTENCY_CHECK_INTERVAL_MINUTES,
 ):
+    # Ensure upload directory exists (may be overridden in tests)
+    try:
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+    except (PermissionError, OSError):
+        pass  # May fail in test environments
+
     await init_db()
     app = web.Application(middlewares=[security_headers_middleware])
 
