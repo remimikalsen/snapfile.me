@@ -17,6 +17,10 @@ def test_security_headers(page: Page, base_url: str):
     assert (
         "default-src 'self'" in csp
     ), "CSP does not include expected default-src directive"
+    # Verify that CSP uses nonces instead of unsafe-inline for scripts
+    assert (
+        "'nonce-" in csp
+    ), "CSP should use nonces for script-src instead of unsafe-inline"
 
     # Verify other security headers.
     assert (
@@ -28,6 +32,21 @@ def test_security_headers(page: Page, base_url: str):
     assert (
         headers.get("referrer-policy") == "same-origin"
     ), "Referrer-Policy header is not set to same-origin"
+
+    # Check for Permissions-Policy header
+    pp = headers.get("permissions-policy")
+    assert pp is not None, "Permissions-Policy header is missing"
+    assert (
+        "fullscreen=(self)" in pp
+    ), "Permissions-Policy should allow fullscreen for self"
+    assert (
+        "geolocation=()" in pp
+    ), "Permissions-Policy should restrict geolocation"
+
+    # Verify Server header is not present (security best practice)
+    assert (
+        "server" not in headers
+    ), "Server header should be removed to avoid information disclosure"
 
     # Check for HSTS if HTTPS_ONLY is enabled in your app.
     if "strict-transport-security" in headers:

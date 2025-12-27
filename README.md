@@ -78,7 +78,7 @@ Alter the `docker-compose.yml` file so you have:
 
 ```
     #image: ghcr.io/remimikalsen/snapfile:v1
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile.snapfile
 ```
@@ -115,7 +115,7 @@ docker run -d \
 
 ### Using a pre-built image
 
-If you just want to use the latest version, use the pre-built images. Check out `docker-compose.yml` for a reference. 
+If you just want to use the latest version, use the pre-built images. Check out `docker-compose.yml` for a reference.
 
 Or if you want to pull the image directly with docker with the latest v1 image.
 
@@ -130,7 +130,7 @@ There are ample configuration opportunities whether you run through Docker or Do
 
 - `HTTPS_ONLY`: Set to true to enable Strict-Transport-Security header (default: false)
 - `MAX_FILE_SIZE`: Maximum allowed file size for uploads (default: 500 MB).
-- `MAX_USES_QUOTA`: Maximum number of uploads allowed per IP address (default: 5).
+- `MAX_USES_QUOTA`: Maximum number of uploads allowed per IP address (default: 10).
 - `FILE_EXPIRY_MINUTES`: Time in minutes after which uploaded files expire (default: 1440 minutes or 24 hours).
 - `QUOTA_RENEWAL_MINUTES`: Interval in minutes for resetting the usage quota (default: 60 minutes).
 - `PURGE_INTERVAL_MINUTES`: Interval in minutes for purging expired files and cleaning up the database (default: 5 minutes).
@@ -149,6 +149,49 @@ Also make sure that the uploads and database directories exist on your computer 
 ## Accessing the web interface
 
 Visit http://localhost:8080
+
+## Security
+
+Snapfile.me implements comprehensive security measures:
+
+- **Security Headers:** Content-Security-Policy (with nonces), X-Content-Type-Options, X-Frame-Options, Strict-Transport-Security, Referrer-Policy, Permissions-Policy
+- **Input Validation:** All user inputs validated and sanitized
+- **SQL Injection Protection:** All database queries use parameterized statements
+- **XSS Protection:** CSP with nonces, template auto-escaping, analytics script sanitization
+- **File Upload Security:** Filename sanitization, size limits, path traversal protection
+- **Rate Limiting:** IP-based quota system with hashed IP addresses
+- **Docker Security:** Non-root user, minimal base image, regular vulnerability scanning
+- **Automated Security Scanning:** Trivy, pip-audit, bandit, and OpenGrep integrated in CI/CD
+- **SBOM Generation:** Software Bill of Materials (CycloneDX and SPDX) generated for releases
+
+For detailed security information, see [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
+
+### Security Scanning
+
+The project includes automated security scanning:
+
+- **Pre-commit hooks:** Security checks before committing code
+- **CI/CD pipelines:** Automated security scanning on every PR and push
+- **Dependency scanning:** pip-audit checks for vulnerable Python packages
+- **Code analysis:** bandit scans for security issues in Python code
+- **Vulnerability scanning:** Trivy scans filesystem and Docker images
+- **SAST scanning:** OpenGrep performs static application security testing
+
+To run security scans locally:
+
+```sh
+# Install pre-commit hooks
+pip install pre-commit
+pre-commit install
+
+# Run all pre-commit hooks
+pre-commit run --all-files
+
+# Run individual security tools
+pip-audit --requirement requirements.txt
+bandit -r app/
+trivy fs .
+```
 
 ## Developer notes
 This app is set up with automatic versioning with git tags, Docker image deployment and app deployment. That's nice to know if you fork it! Read about [building and deploying automatically](https://theawesomegarage.com/blog/build-and-deploy-locally-using-github-actions-and-webhooks).

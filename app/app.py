@@ -25,9 +25,7 @@ if os.path.isfile(VERSION_FILE_PATH):
     with open(VERSION_FILE_PATH, "r") as version_file:
         VERSION = version_file.read().strip() or "Development"
 else:
-    parent_dir_version_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), "VERSION"
-    )
+    parent_dir_version_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "VERSION")
     if os.path.isfile(parent_dir_version_path):
         with open(parent_dir_version_path, "r") as version_file:
             VERSION = version_file.read().strip() + "-development"
@@ -37,19 +35,15 @@ else:
 # Load configuration from environment variables
 HTTPS_ONLY = os.getenv("HTTPS_ONLY", "false").lower() == "true"  # Default to False
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 500 * 1024 * 1024))  # Default to 500 MB
-MAX_USES_QUOTA = int(os.getenv("MAX_USES_QUOTA", 5))  # Default to 5 uploads per day
+MAX_USES_QUOTA = int(os.getenv("MAX_USES_QUOTA", 10))  # Default to 5 uploads per day
 FILE_EXPIRY_MINUTES = int(
     os.getenv("FILE_EXPIRY_MINUTES", 1440)
 )  # Default to 1440 minutes (24 hours)
 QUOTA_RENEWAL_MINUTES = int(
     os.getenv("QUOTA_RENEWAL_MINUTES", 60)
 )  # Default to 60 minutes (1 hour)
-PURGE_INTERVAL_MINUTES = int(
-    os.getenv("PURGE_INTERVAL_MINUTES", 5)
-)  # Cleanup every 5 minutes
-CONSISTENCY_CHECK_INTERVAL_MINUTES = int(
-    os.getenv("CONSISTENCY_CHECK_INTERVAL_MINUTES", 1440)
-)
+PURGE_INTERVAL_MINUTES = int(os.getenv("PURGE_INTERVAL_MINUTES", 5))  # Cleanup every 5 minutes
+CONSISTENCY_CHECK_INTERVAL_MINUTES = int(os.getenv("CONSISTENCY_CHECK_INTERVAL_MINUTES", 1440))
 INTERNAL_IP = os.getenv("INTERNAL_IP", "")
 INTERNAL_PORT = os.getenv("INTERNAL_PORT", "")
 ANALYTICS_SCRIPT_RAW = os.getenv("ANALYTICS_SCRIPT", "")
@@ -62,13 +56,19 @@ ALLOWED_ANALYTICS_DOMAINS = os.getenv(
     "plausible.remim.com,plausible.io,www.googletagmanager.com,www.google-analytics.com",
 ).split(",")
 
-UPLOAD_DIR = "/app/uploads"
-DATABASE_DIR = "/app/database"
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/app/uploads")
+DATABASE_DIR = os.getenv("DATABASE_DIR", "/app/database")
 DATABASE_PATH = os.path.join(DATABASE_DIR, "file_links.db")
 APP_KEY = "aiohttp_jinja2_environment"
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(DATABASE_DIR, exist_ok=True)
+# Create directories if they don't exist (skip if permission denied, e.g., in CI)
+try:
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    os.makedirs(DATABASE_DIR, exist_ok=True)
+except (PermissionError, OSError):
+    # In test environments or CI, directories may not be creatable at import time
+    # They will be created when needed or via environment variables
+    pass
 
 # --- Adapter and converter for datetime ---
 
@@ -104,9 +104,12 @@ async def async_listdir(path):
 
 async def init_db():
     """Initialize the database and create tables if they do not exist."""
-    async with aiosqlite.connect(
-        DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES
-    ) as db:
+    # Ensure database directory exists
+    try:
+        os.makedirs(DATABASE_DIR, exist_ok=True)
+    except (PermissionError, OSError):
+        pass  # May fail in test environments, but database will be created in tmp_path
+    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
         await db.execute(
             """CREATE TABLE IF NOT EXISTS files
                              (id TEXT PRIMARY KEY, filename TEXT, path TEXT, download_code TEXT, upload_time DATETIME)"""
@@ -156,9 +159,7 @@ def validate_and_sanitize_analytics_script(script_html):
         return ""  # Inline JavaScript not allowed
 
     # Extract src attribute value
-    src_match = re.search(
-        r'src\s*=\s*["\']([^"\']+)["\']', attributes_str, re.IGNORECASE
-    )
+    src_match = re.search(r'src\s*=\s*["\']([^"\']+)["\']', attributes_str, re.IGNORECASE)
     if not src_match:
         return ""  # Must have src attribute
 
@@ -233,8 +234,10 @@ ANALYTICS_SCRIPT = validate_and_sanitize_analytics_script(ANALYTICS_SCRIPT_RAW)
 # --- Context Processors for Templates ---
 
 
-async def version_context_processor(_):
-    return {"VERSION": VERSION, "ANALYTICS_SCRIPT": ANALYTICS_SCRIPT}
+async def version_context_processor(request):
+    # Get nonce from request (set by middleware)
+    nonce = request.get("csp_nonce", "")
+    return {"VERSION": VERSION, "ANALYTICS_SCRIPT": ANALYTICS_SCRIPT, "CSP_NONCE": nonce}
 
 
 # --- Utility Functions ---
@@ -256,12 +259,8 @@ def get_client_ip(request):
 
 async def ip_reached_quota(ip):
     """Check if the IP has reached its upload quota; reset if the renewal time has passed."""
-    async with aiosqlite.connect(
-        DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES
-    ) as db:
-        async with db.execute(
-            "SELECT uses, last_access FROM ip_usage WHERE ip=?", (ip,)
-        ) as cursor:
+    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
+        async with db.execute("SELECT uses, last_access FROM ip_usage WHERE ip=?", (ip,)) as cursor:
             row = await cursor.fetchone()
         current_time = datetime.now()
         if row:
@@ -281,6 +280,15 @@ def generate_download_code(length=12):
     return "".join(secrets.choice(characters) for i in range(length))
 
 
+def validate_download_code(download_code):
+    """Validate that download code matches expected format (12 alphanumeric characters)."""
+    if not download_code or not isinstance(download_code, str):
+        return False
+    if len(download_code) != 12:
+        return False
+    return all(c in string.ascii_letters + string.digits for c in download_code)
+
+
 # --- Request Handlers ---
 
 
@@ -292,9 +300,7 @@ async def index(request):
         "file_expiry_hours": file_expiry_hours,
         "file_expiry_minutes": file_expiry_minutes,
     }
-    return aiohttp_jinja2.render_template(
-        "index.html", request, context, app_key=APP_KEY
-    )
+    return aiohttp_jinja2.render_template("index.html", request, context, app_key=APP_KEY)
 
 
 async def upload_file(request):
@@ -328,15 +334,11 @@ async def upload_file(request):
             if size > MAX_FILE_SIZE:
                 if await async_isfile(file_path):
                     await aiofiles.os.remove(file_path)
-                return web.Response(
-                    text="File size exceeds the maximum limit.", status=400
-                )
+                return web.Response(text="File size exceeds the maximum limit.", status=400)
             await f.write(chunk)
 
     upload_time = datetime.now()
-    async with aiosqlite.connect(
-        DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES
-    ) as db:
+    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
         await db.execute(
             "INSERT INTO files (id, filename, path, download_code, upload_time) VALUES (?, ?, ?, ?, ?)",
             (file_id, filename, file_path, download_code, upload_time),
@@ -361,9 +363,13 @@ async def upload_file(request):
 
 async def landing_page_download(request):
     download_code = request.match_info["download_code"]
-    async with aiosqlite.connect(
-        DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES
-    ) as db:
+    if not validate_download_code(download_code):
+        response = aiohttp_jinja2.render_template(
+            "file_not_found.html", request, {}, app_key=APP_KEY
+        )
+        response.set_status(404)
+        return response
+    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
         async with db.execute(
             "SELECT filename, path FROM files WHERE download_code=?", (download_code,)
         ) as cursor:
@@ -384,9 +390,7 @@ async def landing_page_download(request):
             )
 
     # Key not found, so returning a 404 response
-    response = aiohttp_jinja2.render_template(
-        "file_not_found.html", request, {}, app_key=APP_KEY
-    )
+    response = aiohttp_jinja2.render_template("file_not_found.html", request, {}, app_key=APP_KEY)
     response.set_status(404)
     return response
 
@@ -398,19 +402,17 @@ async def delayed_file_deletion(file_path, download_code):
         try:
             await aiofiles.os.remove(file_path)
         except Exception:
-            pass
-    async with aiosqlite.connect(
-        DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES
-    ) as db:
+            pass  # nosec B110 - File may already be deleted, ignore errors
+    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
         await db.execute("DELETE FROM files WHERE download_code=?", (download_code,))
         await db.commit()
 
 
 async def download_file(request):
     download_code = request.match_info["download_code"]
-    async with aiosqlite.connect(
-        DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES
-    ) as db:
+    if not validate_download_code(download_code):
+        return aiohttp_jinja2.render_template("file_not_found.html", request, {}, app_key=APP_KEY)
+    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
         async with db.execute(
             "SELECT filename, path FROM files WHERE download_code=?", (download_code,)
         ) as cursor:
@@ -419,15 +421,11 @@ async def download_file(request):
         filename, file_path = row
         if await async_isfile(file_path):
             response = web.FileResponse(file_path)
-            response.headers["Content-Disposition"] = (
-                f'attachment; filename="{filename}"'
-            )
+            response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
             # Schedule the deletion task so it runs in the background
             asyncio.create_task(delayed_file_deletion(file_path, download_code))
             return response
-    return aiohttp_jinja2.render_template(
-        "file_not_found.html", request, {}, app_key=APP_KEY
-    )
+    return aiohttp_jinja2.render_template("file_not_found.html", request, {}, app_key=APP_KEY)
 
 
 async def handle_404(request):
@@ -443,12 +441,8 @@ async def check_limit(request):
     current_time = datetime.now()
     next_quota_renewal = timedelta(minutes=QUOTA_RENEWAL_MINUTES)
 
-    async with aiosqlite.connect(
-        DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES
-    ) as db:
-        async with db.execute(
-            "SELECT uses, last_access FROM ip_usage WHERE ip=?", (ip,)
-        ) as cursor:
+    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
+        async with db.execute("SELECT uses, last_access FROM ip_usage WHERE ip=?", (ip,)) as cursor:
             row = await cursor.fetchone()
     if row:
         uses, last_access = row
@@ -481,9 +475,9 @@ async def check_limit(request):
 
 async def time_left(request):
     download_code = request.match_info["download_code"]
-    async with aiosqlite.connect(
-        DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES
-    ) as db:
+    if not validate_download_code(download_code):
+        return web.json_response({"message": "Download code not found."}, status=404)
+    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
         async with db.execute(
             "SELECT upload_time FROM files WHERE download_code=?", (download_code,)
         ) as cursor:
@@ -504,9 +498,7 @@ async def time_left(request):
                 }
             )
         else:
-            return web.json_response(
-                {"message": "The file has already expired."}, status=410
-            )
+            return web.json_response({"message": "The file has already expired."}, status=410)
     else:
         return web.json_response({"message": "Download code not found."}, status=404)
 
@@ -517,9 +509,7 @@ async def time_left(request):
 async def purge_expired():
     """Delete files older than the expiry time and clean up the ip_usage table."""
     expiry_time = datetime.now() - timedelta(minutes=FILE_EXPIRY_MINUTES)
-    async with aiosqlite.connect(
-        DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES
-    ) as db:
+    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
         async with db.execute(
             "SELECT id, path FROM files WHERE upload_time < ?", (expiry_time,)
         ) as cursor:
@@ -529,7 +519,7 @@ async def purge_expired():
                 try:
                     await aiofiles.os.remove(file_path)
                 except Exception:
-                    pass
+                    pass  # nosec B110 - File may already be deleted, ignore errors
             await db.execute("DELETE FROM files WHERE id=?", (file_id,))
         cutoff_time = datetime.now() - timedelta(minutes=QUOTA_RENEWAL_MINUTES)
         await db.execute("DELETE FROM ip_usage WHERE last_access < ?", (cutoff_time,))
@@ -538,9 +528,7 @@ async def purge_expired():
 
 async def check_database_file_consistency():
     """Ensure that database entries and actual files on disk are in sync."""
-    async with aiosqlite.connect(
-        DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES
-    ) as db:
+    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
         async with db.execute("SELECT id, path FROM files") as cursor:
             files = await cursor.fetchall()
         for file_id, file_path in files:
@@ -549,15 +537,13 @@ async def check_database_file_consistency():
         upload_files = await async_listdir(UPLOAD_DIR)
         for filename in upload_files:
             file_path = os.path.join(UPLOAD_DIR, filename)
-            async with db.execute(
-                "SELECT id FROM files WHERE path=?", (file_path,)
-            ) as cursor:
+            async with db.execute("SELECT id FROM files WHERE path=?", (file_path,)) as cursor:
                 exists = await cursor.fetchone()
             if not exists:
                 try:
                     await aiofiles.os.remove(file_path)
                 except Exception:
-                    pass
+                    pass  # nosec B110 - File may already be deleted, ignore errors
         await db.commit()
 
 
@@ -566,16 +552,22 @@ async def check_database_file_consistency():
 
 @web.middleware
 async def security_headers_middleware(request, handler):
+    # Generate nonce for this request (used in CSP and made available to templates)
+    nonce = secrets.token_urlsafe(16)
+    request["csp_nonce"] = nonce
+
     response = await handler(request)
-    # Set Content Security Policy
+
+    # Set Content Security Policy with nonce
     csp = (
         "default-src 'self' {analytics_script_csp}; "
-        "script-src 'self' 'unsafe-inline' {analytics_script_csp}; "
+        "script-src 'self' 'nonce-{nonce}' {analytics_script_csp}; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; "
         "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
         "img-src 'self' data:;"
-    ).format(analytics_script_csp=ANALYTICS_SCRIPT_CSP)
+    ).format(analytics_script_csp=ANALYTICS_SCRIPT_CSP, nonce=nonce)
     response.headers["Content-Security-Policy"] = csp
+
     # Prevent MIME type sniffing
     response.headers["X-Content-Type-Options"] = "nosniff"
     # Prevent clickjacking
@@ -587,6 +579,19 @@ async def security_headers_middleware(request, handler):
         )
     # Referrer information policy
     response.headers["Referrer-Policy"] = "same-origin"
+    # Permissions-Policy header to restrict browser features
+    response.headers["Permissions-Policy"] = (
+        "geolocation=(), "
+        "microphone=(), "
+        "camera=(), "
+        "payment=(), "
+        "usb=(), "
+        "magnetometer=(), "
+        "gyroscope=(), "
+        "accelerometer=(), "
+        "ambient-light-sensor=(), "
+        "fullscreen=(self)"
+    )
     return response
 
 
@@ -597,8 +602,24 @@ async def create_app(
     purge_interval_minutes=PURGE_INTERVAL_MINUTES,
     consistency_check_interval_minutes=CONSISTENCY_CHECK_INTERVAL_MINUTES,
 ):
+    # Ensure upload directory exists (may be overridden in tests)
+    try:
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+    except (PermissionError, OSError):
+        pass  # May fail in test environments
+
     await init_db()
     app = web.Application(middlewares=[security_headers_middleware])
+
+    # Remove Server header using signal handler (aiohttp adds it automatically)
+    # This ensures the header is removed even if aiohttp adds it after middleware runs
+    async def on_response_prepare(request, response):
+        # Remove Server header that aiohttp automatically adds
+        server_keys = [key for key in response.headers.keys() if key.lower() == "server"]
+        for key in server_keys:
+            del response.headers[key]
+
+    app.on_response_prepare.append(on_response_prepare)
 
     aiohttp_jinja2.setup(
         app,
@@ -634,4 +655,8 @@ async def create_app(
 
 
 if __name__ == "__main__":
-    web.run_app(create_app(), host="0.0.0.0", port=8080)
+    web.run_app(
+        create_app(),
+        host="0.0.0.0",  # nosec B104 - Containerized app, binding to all interfaces is safe
+        port=8080,
+    )

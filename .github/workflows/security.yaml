@@ -1,0 +1,165 @@
+name: Security Scanning
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  trivy-filesystem:
+    name: Trivy Filesystem Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Run pip-audit
+        run: |
+          echo "Running pip-audit to check Python dependencies for vulnerabilities..."
+          pip install pip-audit
+          pip-audit --requirement requirements.txt --format json --output pip-audit-results.json || \
+            (echo "::error::pip-audit found vulnerabilities in Python dependencies." && \
+             pip-audit --requirement requirements.txt --format table && exit 1)
+          echo "pip-audit passed - no vulnerabilities found in Python dependencies."
+
+      - name: Run bandit security linter
+        run: |
+          echo "Running bandit for Python code security analysis..."
+          pip install bandit[toml]
+          bandit -r app/ -f json -o bandit-report.json || \
+            (echo "::error::bandit found security issues in Python code." && \
+             bandit -r app/ -f screen && exit 1)
+          echo "bandit passed - no security issues found in Python code."
+
+      - name: Run Trivy vulnerability scanner in repo mode
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results-fs.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+          scanners: 'vuln,secret,misconfig'
+          trivyignores: '.trivyignore'
+          exit-code: '0'  # Don't fail on all vulnerabilities, we'll check for CRITICAL only
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Check for Critical vulnerabilities
+        run: |
+          # Run Trivy again to get JSON output for checking
+          trivy fs --severity CRITICAL --scanners vuln,secret,misconfig \
+            --format json --exit-code 0 --ignorefile .trivyignore . > trivy-critical-check.json || true
+
+          # Count critical severity issues
+          CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-critical-check.json 2>/dev/null || echo "0")
+
+          echo "Critical vulnerabilities: $CRITICAL_COUNT"
+
+          # Display summary
+          trivy fs --severity CRITICAL --scanners vuln,secret,misconfig \
+            --format table --exit-code 0 --ignorefile .trivyignore . || true
+
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "::error::Found $CRITICAL_COUNT critical severity vulnerabilities"
+            exit 1
+          else
+            echo "No critical severity vulnerabilities found"
+          fi
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'trivy-results-fs.sarif'
+          category: 'trivy-fs'
+
+  trivy-image:
+    name: Trivy Image Scan
+    runs-on: ubuntu-latest
+    needs: []
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image for scanning
+        run: |
+          docker build -t snapfile:scan -f Dockerfile.snapfile .
+
+      - name: Run Trivy vulnerability scanner in image mode
+        id: trivy-image-scan
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: 'image'
+          scan-ref: 'snapfile:scan'
+          format: 'sarif'
+          output: 'trivy-results-image.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+          scanners: 'vuln,secret,misconfig'
+          trivyignores: '.trivyignore'
+          exit-code: '0'  # Don't fail on vulnerabilities, we'll check the output
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Check for Critical vulnerabilities
+        run: |
+          # Parse the SARIF file to count vulnerabilities
+          # Note: Trivy action should have created the JSON output, but we'll use the SARIF
+          # For a simpler approach, run Trivy again to get JSON output
+          trivy image --severity CRITICAL --scanners vuln,secret,misconfig \
+            --format json --exit-code 0 --ignorefile .trivyignore snapfile:scan > trivy-check.json || true
+
+          # Count critical severity issues
+          CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-check.json 2>/dev/null || echo "0")
+
+          echo "Critical vulnerabilities: $CRITICAL_COUNT"
+
+          # Display summary
+          trivy image --severity CRITICAL --scanners vuln,secret,misconfig \
+            --format table --exit-code 0 --ignorefile .trivyignore snapfile:scan || true
+
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "::error::Found $CRITICAL_COUNT critical severity vulnerabilities"
+            exit 1
+          else
+            echo "No critical severity vulnerabilities found"
+          fi
+
+      - name: Upload Trivy image results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'trivy-results-image.sarif'
+          category: 'trivy-image'
+
+  opengrep:
+    name: OpenGrep Code Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Full history for better secret detection
+
+      - name: Run Opengrep SAST scan
+        run: |
+          wget https://github.com/opengrep/opengrep/releases/download/v1.12.0/opengrep_manylinux_x86 -O opengrep
+          chmod +x opengrep
+          ./opengrep ci --sarif --sarif-output opengrep_report.sarif --config auto --suppress-errors
+        shell: bash -l {0}
+
+      - name: Upload OpenGrep results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'opengrep_report.sarif'

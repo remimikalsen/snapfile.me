@@ -6,7 +6,7 @@
   <h2>Download your file</h2>
   <div id="download-area">
     <h3>{{ filename }}</h3>
-    <button id="download-button" onclick="window.location.href='{{ download_link }}'">Download now</button>
+    <button id="download-button">Download now</button>
     <p id="time-left"></p>
     <span class="success-span-direct">
       Use the <a href="http://{{ internal_ip }}:{{ internal_port }}{{ download_link }}">direct IP download</a> if you're on the same network as the SnapFile.me server.
@@ -19,7 +19,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-  <script>
+  <script nonce="{{ CSP_NONCE }}">
     async function fetchTimeLeft() {
       const response = await fetch(`/time-left/{{ download_code }}`);
       if (response.ok) {
@@ -47,6 +47,7 @@
       document.getElementById('download-area').style.display = 'none';
       document.getElementById('download-notification').style.display = 'block';
       document.getElementById('download-notification').innerText = 'File download was initiated. Please check your downloads folder.';
+      window.location.href = '{{ download_link }}';
     });
   </script>
 {% endblock %}

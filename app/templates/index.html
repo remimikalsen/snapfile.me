@@ -39,7 +39,7 @@
 
 {% block extra_scripts %}
   <div id="link-copy-notification" style="display: none;"></div>
-  <script>
+  <script nonce="{{ CSP_NONCE }}">
     const uploadContainer = document.getElementById('upload-container');
     const uploadArea = document.getElementById('upload-area');
     const fileInput = document.getElementById('file-input');

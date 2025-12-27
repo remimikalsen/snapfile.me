@@ -25,15 +25,19 @@ jobs:
           ssh-keyscan github.com >> ~/.ssh/known_hosts
 
       - name: Check out repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Update remote URL to use SSH
-        run: git remote set-url origin git@github.com:${{ github.repository }}.git
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: git remote set-url origin git@github.com:$REPOSITORY.git
 
       - name: Determine next version from last tag
         id: semver
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           # Fetch all tags (sometimes needed explicitly)
           git fetch --tags --prune
@@ -51,11 +55,11 @@ jobs:
           NEXT_PATCH=$((PATCH + 1))
 
           # Check commit message for [major] or [minor]
-          if [[ "${{ github.event.head_commit.message }}" =~ \[major\] ]]; then
+          if [[ "$COMMIT_MESSAGE" =~ \[major\] ]]; then
             NEXT_MAJOR=$((MAJOR + 1))
             NEXT_MINOR=0
             NEXT_PATCH=0
-          elif [[ "${{ github.event.head_commit.message }}" =~ \[minor\] ]]; then
+          elif [[ "$COMMIT_MESSAGE" =~ \[minor\] ]]; then
             NEXT_MINOR=$((MINOR + 1))
             NEXT_PATCH=0
           fi
@@ -69,14 +73,17 @@ jobs:
 
       - name: Resolve true commit SHA
         id: sha_resolver
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          if [[ "$EVENT_NAME" == "push" ]]; then
             ACTUAL_SHA=$(git log --merges --pretty=format:%H -1 | xargs -I{} git show {} --no-patch --format=%P | cut -d' ' -f2)
-            echo "TRUE_SHA=${ACTUAL_SHA:-${{ github.sha }}}" >> $GITHUB_OUTPUT
+            echo "TRUE_SHA=${ACTUAL_SHA:-$GITHUB_SHA}" >> $GITHUB_OUTPUT
           else
-            echo "TRUE_SHA=${{ github.sha }}" >> $GITHUB_OUTPUT
+            echo "TRUE_SHA=$GITHUB_SHA" >> $GITHUB_OUTPUT
           fi
-            
+
       - name: Get PR metadata
         uses: 8BitJonny/gh-get-current-pr@3.0.0
         id: pr_meta
@@ -86,12 +93,15 @@ jobs:
 
       - name: Get Source Branch of the Merged PR
         id: get_branch
+        env:
+          PR_NUMBER: ${{ steps.pr_meta.outputs.number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          PR_NUMBER=${{ steps.pr_meta.outputs.number }}
           echo "Fetching branch name for PR #$PR_NUMBER..."
 
-          BRANCH_NAME=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER" | jq -r '.head.ref')
+          BRANCH_NAME=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$REPOSITORY/pulls/$PR_NUMBER" | jq -r '.head.ref')
 
           if [[ -z "$BRANCH_NAME" || "$BRANCH_NAME" == "null" ]]; then
             echo "Failed to get branch name for PR #$PR_NUMBER"
@@ -103,55 +113,62 @@ jobs:
 
       - name: Find Last Successful Test Run for the Merged PR Branch
         id: find_run
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          echo "Finding last workflow run for branch ${{ env.BRANCH_NAME }}..."
+          echo "Finding last workflow run for branch $BRANCH_NAME..."
 
-          RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs?event=pull_request&status=completed&per_page=10" | \
-            jq -r ".workflow_runs[] | select(.head_branch==\"${{ env.BRANCH_NAME }}\" and .name==\"Code checks and testing\") | .id" | head -n 1)
+          RUN_ID=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$REPOSITORY/actions/runs?event=pull_request&status=completed&per_page=10" | \
+            jq -r ".workflow_runs[] | select(.head_branch==\"$BRANCH_NAME\" and .name==\"Code checks and testing\") | .id" | head -n 1)
 
           if [[ -z "$RUN_ID" ]]; then
-            echo "No workflow run found for branch ${{ env.BRANCH_NAME }}"
+            echo "No workflow run found for branch $BRANCH_NAME"
             exit 1
           fi
 
           echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
 
       - name: Download Coverage Artifact from Last Test Workflow
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr_meta.outputs.number }}
         run: |
-          echo "Downloading artifact from workflow run ID: ${{ env.RUN_ID }}"
+          echo "Downloading artifact from workflow run ID: $RUN_ID"
 
-          ARTIFACT_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ env.RUN_ID }}/artifacts"
-          ARTIFACT_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "$ARTIFACT_URL" | \
-            jq -r ".artifacts[] | select(.name==\"coverage-report-${{ steps.pr_meta.outputs.number }}\") | .id")
+          ARTIFACT_URL="https://api.github.com/repos/$REPOSITORY/actions/runs/$RUN_ID/artifacts"
+          ARTIFACT_ID=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "$ARTIFACT_URL" | \
+            jq -r ".artifacts[] | select(.name==\"coverage-report-$PR_NUMBER\") | .id")
 
           if [[ -z "$ARTIFACT_ID" ]]; then
-            echo "No coverage artifact found for PR #${{ steps.pr_meta.outputs.number }}"
+            echo "No coverage artifact found for PR #$PR_NUMBER"
             exit 1
           fi
 
           echo "Artifact ID: $ARTIFACT_ID"
 
-          curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
             -L -o coverage.zip \
-            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip"
+            "https://api.github.com/repos/$REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip"
 
           mkdir -p tests
           unzip -o coverage.zip -d tests
 
       - name: Update VERSION file and commit coverage artifacts
         run: |
-          echo "${{ env.VERSION }}" > VERSION
+          echo "$VERSION" > VERSION
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@snapfile"
 
           # Check if coverage artifacts exist before committing
           if [ -f "tests/coverage-badge.svg" ] && [ -f "tests/coverage.xml" ]; then
             git add VERSION tests/coverage-badge.svg tests/coverage.xml
-            git commit -m "ci: update VERSION file to ${{ env.VERSION }} and coverage artifacts [skip ci]"
+            git commit -m "ci: update VERSION file to $VERSION and coverage artifacts [skip ci]"
           else
             git add VERSION
-            git commit -m "ci: update VERSION file to ${{ env.VERSION }} [skip ci]"
+            git commit -m "ci: update VERSION file to $VERSION [skip ci]"
           fi
 
           git push origin main
@@ -162,6 +179,97 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t snapfile:build -f Dockerfile.snapfile .
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          severity: 'CRITICAL'
+          scanners: 'vuln,secret,misconfig'
+          trivyignores: '.trivyignore'
+          exit-code: '1'
+
+      - name: Run Trivy image scan
+        id: trivy-scan
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: 'image'
+          scan-ref: 'snapfile:build'
+          format: 'json'
+          output: 'trivy-results.json'
+          severity: 'CRITICAL'
+          scanners: 'vuln,secret,misconfig'
+          trivyignores: '.trivyignore'
+          exit-code: '0'  # Don't fail yet, we'll check the output
+
+      - name: Check for Critical vulnerabilities
+        run: |
+          # Install jq for JSON parsing
+          sudo apt-get update && sudo apt-get install -y jq
+
+          # Count vulnerabilities from JSON output
+          CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-results.json 2>/dev/null || echo "0")
+
+          echo "Critical vulnerabilities: $CRITICAL_COUNT"
+
+          # Display summary using Trivy action output
+          if [ -f trivy-results.json ]; then
+            echo "=== Vulnerability Summary ==="
+            jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL") | "\(.Severity): \(.VulnerabilityID) - \(.Title)"' trivy-results.json 2>/dev/null || echo "No critical vulnerabilities found in JSON"
+          fi
+
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "::error::Found $CRITICAL_COUNT critical severity vulnerabilities. Image will not be pushed to GHCR."
+            echo "VULN_FOUND=true" >> $GITHUB_ENV
+            exit 1
+          else
+            echo "No critical severity vulnerabilities found. Proceeding with image push."
+            echo "VULN_FOUND=false" >> $GITHUB_ENV
+          fi
+
+      - name: Generate SBOM
+        if: env.VULN_FOUND == 'false'
+        run: |
+          # Generate SBOM in CycloneDX format (industry standard)
+          trivy image --format cyclonedx --output sbom-cyclonedx.json snapfile:build
+
+          # Also generate SPDX format for compatibility
+          trivy image --format spdx-json --output sbom-spdx.json snapfile:build
+
+          echo "SBOM files generated:"
+          ls -lh sbom-*.json
+
+      - name: Upload SBOM artifacts
+        if: env.VULN_FOUND == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ env.VERSION }}
+          path: |
+            sbom-cyclonedx.json
+            sbom-spdx.json
+          retention-days: 90
+
+      - name: Tag Docker image
+        if: env.VULN_FOUND == 'false'
+        run: |
+          echo "Tagging image with version $VERSION ..."
+          docker tag snapfile:build ghcr.io/remimikalsen/snapfile:$VERSION
+          docker tag snapfile:build ghcr.io/remimikalsen/snapfile:v$MAJOR
+
+      - name: Login to GitHub Container Registry
+        if: env.VULN_FOUND == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
+
+      - name: Push Docker image
+        if: env.VULN_FOUND == 'false'
+        run: |
+          docker push ghcr.io/remimikalsen/snapfile:$VERSION
+          docker push ghcr.io/remimikalsen/snapfile:v$MAJOR
 
       - name: Tag Docker image
         run: |
@@ -182,24 +290,28 @@ jobs:
         run: |
           # Configure Git
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "github-actions[bot]@snapfile"
 
           # Create and push the new tag
-          git tag "${{ env.VERSION }}" -m "ci: release version ${{ env.VERSION }}"
-          git push origin "${{ env.VERSION }}"
-        
+          git tag "$VERSION" -m "ci: release version $VERSION"
+          git push origin "$VERSION"
+
       - name: Check if PR was squashed
         id: check_squash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr_meta.outputs.number }}
         run: |
           # Fetch PR commits using GitHub API and count them using Python
           PR_COMMITS=$(curl -s \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ steps.pr_meta.outputs.number }}/commits" | \
+            "https://api.github.com/repos/$REPOSITORY/pulls/$PR_NUMBER/commits" | \
             python3 -c "import sys, json; print(len(json.load(sys.stdin)))")
-          
+
           echo "Commit count: $PR_COMMITS"
-      
+
           # If there's only one commit, assume it's a squash merge
           if [[ "$PR_COMMITS" -eq 1 ]]; then
             echo "SQUASH_MERGE=true" >> $GITHUB_ENV
@@ -208,35 +320,44 @@ jobs:
           fi
 
       - name: Get commit messages with SHAs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr_meta.outputs.number }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           if [[ "$SQUASH_MERGE" == "true" ]]; then
             # For squash merges, just fetch the single PR commit
             response=$(curl -s \
               -H "Accept: application/vnd.github+json" \
-              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls/${{ steps.pr_meta.outputs.number }}/commits")
-      
+              -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/$REPOSITORY/pulls/$PR_NUMBER/commits")
+
             echo "$response" \
               | python3 -c "import sys, json; d = json.load(sys.stdin)[0]; print(f\"{d['commit']['message']} ({d['sha'][:7]})\")" \
               > commits.txt
           else
             # For regular merges, exclude lines containing "Merge pull request"
-            git log --pretty=format:"%s (%h)" ${{ github.event.before }}..${{ github.sha }} \
+            git log --pretty=format:"%s (%h)" $GITHUB_EVENT_BEFORE..$GITHUB_SHA \
               | grep -v "Merge pull request" \
               > commits.txt
           fi
 
       - name: Build release notes file
+        env:
+          PR_TITLE: ${{ steps.pr_meta.outputs.pr_title }}
+          PR_BODY: ${{ steps.pr_meta.outputs.pr_body }}
         run: |
           # Create a file for the release notes.
           # Title from the PR:
-          echo "## ${{ steps.pr_meta.outputs.pr_title }}" > release_body.md
+          echo "## $PR_TITLE" > release_body.md
 
           # Conditionally add a "Summary" section if there's a PR body.
-          if [[ -n "${{ steps.pr_meta.outputs.pr_body }}" ]]; then
+          if [[ -n "$PR_BODY" ]]; then
             echo "" >> release_body.md
             echo "### Summary" >> release_body.md
-            echo "${{ steps.pr_meta.outputs.pr_body }}" >> release_body.md
+            echo "$PR_BODY" >> release_body.md
           fi
 
           echo "" >> release_body.md
@@ -245,10 +366,11 @@ jobs:
 
           echo "" >> release_body.md
           echo "### Docker Tags" >> release_body.md
-          echo "- Stable: [ghcr.io/remimikalsen/snapfile:${{ env.VERSION }}](https://ghcr.io/remimikalsen/snapfile:${{ env.VERSION }})" >> release_body.md
-          echo "- Major: [ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }}](https://ghcr.io/remimikalsen/snapfile:v${{ env.MAJOR }})" >> release_body.md
+          echo "- Stable: [ghcr.io/remimikalsen/snapfile:$VERSION](https://ghcr.io/remimikalsen/snapfile:$VERSION)" >> release_body.md
+          echo "- Major: [ghcr.io/remimikalsen/snapfile:v$MAJOR](https://ghcr.io/remimikalsen/snapfile:v$MAJOR)" >> release_body.md
 
       - name: Create GitHub Release
+        if: env.VULN_FOUND == 'false'
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -256,14 +378,19 @@ jobs:
           tag_name: ${{ env.VERSION }}
           name: "Release ${{ env.VERSION }}"
           body_path: release_body.md
+          files: |
+            sbom-cyclonedx.json
+            sbom-spdx.json
           draft: false
           prerelease: false
 
-
       - name: Trigger production update
+        if: env.VULN_FOUND == 'false'
+        env:
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
         run: |
           curl -X POST \
             -H "Content-Type: application/json" \
-            -H "Secret: ${{ secrets.WEBHOOK_SECRET }}" \
-            -d '{"version": "'${{ env.VERSION }}'"}' \
+            -H "Secret: $WEBHOOK_SECRET" \
+            -d '{"version": "'$VERSION'"}' \
             https://webhooks.theawesomegarage.com/update-snapfile

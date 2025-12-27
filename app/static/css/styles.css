@@ -14,7 +14,7 @@
     --border-color: #007acc;
     --link-color: #007acc;
   }
-  
+
   body.dark {
     --bg-color: #121212;
     --text-color: #e0e0e0;
@@ -26,7 +26,7 @@
     --accent-color: #66bb6a;
     --link-color: #66bb6a;
   }
-  
+
   /* Global Base Styles */
   body {
     font-family: 'Roboto', Arial, sans-serif;
@@ -39,11 +39,11 @@
     min-height: 100vh;
     transition: background-color 0.3s ease, color 0.3s ease;
   }
-  
+
   p {
     font-size: 1.2em;
   }
-  
+
   /* Header */
   header {
     position: relative;
@@ -54,18 +54,18 @@
     flex-direction: column;
     align-items: center;
   }
-  
+
   header h1 {
     color: var(--primary-color);
     font-size: 2.3em;
     margin-bottom: 0;
   }
-  
+
   p.header {
     margin-top: 6px;
     color: var(--secondary-color);
   }
-  
+
   /* Dark Mode Toggle Button */
   button#theme-toggle {
     position: absolute;
@@ -79,7 +79,7 @@
     color: var(--primary-color);
   }
 
-  
+
   /* Main Content Area */
   main {
     flex: 1;
@@ -90,7 +90,7 @@
     padding: 20px;
     transition: padding 0.3s ease;
   }
-  
+
   @media (max-width: 600px) {
     main {
       padding: 10px;
@@ -103,34 +103,34 @@
       }
 
   }
-  
+
   /* Links & Typography */
   a {
     color: var(--link-color);
     text-decoration: none;
   }
-  
+
   a.logo-link {
     cursor: pointer;
   }
-  
+
   /* Footer */
   footer {
     padding: 20px;
     background-color: var(--footer-bg);
   }
-  
+
   footer p {
     text-align: center;
     margin: 10px;
     color: var(--text-color);
   }
-  
+
   footer a {
     text-decoration: none;
     color: var(--link-color);
   }
-  
+
   /* Headings */
   h2 {
     color: var(--text-color);
@@ -139,12 +139,12 @@
     font-weight: bold;
     margin-bottom: 20px;
   }
-  
-  
+
+
   /* ===========================================================
      Sub Template Specific Styles
      =========================================================== */
-  
+
   /* Quota Info  */
   p.quota-info {
     margin: 10px;
@@ -153,7 +153,7 @@
     text-align: center;
     font-weight: bold;
   }
-  
+
   /* Upload Area */
   #upload-area {
     background-color: #ffffff18;
@@ -165,21 +165,21 @@
     transition: background-color 0.3s ease;
     position: relative;
   }
-  
+
   #upload-area.dragover {
     background-color: #e6f7ff;
   }
-  
+
   #upload-area.disabled {
     background-color: var(--bg-color);
     border: none;
     cursor: default;
   }
-  
+
   #upload-area input[type="file"] {
     display: none;
   }
-  
+
   #upload-area label {
     display: block;
     font-size: 1.2em;
@@ -190,7 +190,7 @@
     width: 200px;
     margin: 0 auto;
   }
-  
+
   #upload-area button,
   #download-area button {
     background-color: var(--primary-color);
@@ -207,19 +207,19 @@
     gap: 10px;
     width: 200px;
   }
-  
+
   #upload-area p {
     color: var(--text-color);
   }
-  
+
   #upload-area button:hover {
     background-color: var(--secondary-color);
   }
-  
+
   #upload-area .icon {
     font-size: 2em;
   }
-  
+
   /* Upload Help Text & Time Left */
   p.upload-helptext,
   #time-left {
@@ -230,19 +230,19 @@
     padding: 0 10px;
     margin-top: 20px;
   }
-  
+
   /* Success & Status Messages */
   .success-link-back,
   .success-link {
     color: var(--secondary-color);
     text-decoration: none;
   }
-  
+
   .success-link-back:hover,
   .success-link:hover {
     text-decoration: underline;
   }
-  
+
   #snapfile-status {
     display: none;
     text-align: center;
@@ -250,13 +250,13 @@
     padding-bottom: 0;
     max-width: 500px;
   }
-  
+
   #progress {
     font-size: 1.5em;
     color: var(--primary-color);
     margin-top: 20px;
   }
-  
+
   #progress-bar {
     position: relative;
     width: 100%;
@@ -264,13 +264,13 @@
     border-radius: 5px;
     overflow: hidden;
   }
-  
+
   #progress-bar > div {
     height: 20px;
     background-color: var(--accent-color);
     width: 0;
   }
-  
+
   #progress-percentage {
     position: absolute;
     top: 0;
@@ -280,34 +280,34 @@
     font-weight: bold;
     line-height: 20px;
   }
-  
+
   /* Success Content */
   .success-content {
     padding: 0 20px;
     border-radius: 5px;
     text-align: center;
   }
-  
+
   .success-link {
     font-weight: normal;
   }
-  
+
   .link-back-span {
     display: block;
     margin: 35px 0 20px;
   }
-  
+
   .success-span-direct {
     display: block;
     font-size: 0.8em;
   }
-  
+
   .success-span-share {
     font-weight: normal;
     display: block;
     margin: 10px;
   }
-  
+
   .success-button {
     background-color: var(--primary-color);
     color: white;
@@ -320,16 +320,16 @@
     align-items: center;
     justify-content: center;
   }
-  
+
   .success-button .material-icons {
     font-size: 1.5em;
     margin: 0;
   }
-  
+
   .success-button:hover {
     background-color: var(--secondary-color);
   }
-  
+
   /* Success/Error Messages */
   #success-message,
   #error-message {
@@ -337,18 +337,18 @@
     margin-top: 20px;
     transition: opacity 0.5s ease;
   }
-  
+
   #error-message {
     color: #a80000;
   }
-  
+
   /* Logo Image */
   img.snapfile-logo {
     width: 24px;
     vertical-align: middle;
     margin-right: 10px;
   }
-  
+
   /* Link Copy Notification */
   #link-copy-notification {
     position: fixed;
@@ -362,7 +362,7 @@
     transition: opacity 0.5s ease-in-out;
     z-index: 1000;
   }
-  
+
   /* Download Area */
   #download-notification,
   #download-area {
@@ -372,12 +372,11 @@
     padding-bottom: 0;
     max-width: 500px;
   }
-  
+
   #download-notification {
     display: none;
   }
-  
+
   div.to-home {
     margin-bottom: 30px;
   }
-  

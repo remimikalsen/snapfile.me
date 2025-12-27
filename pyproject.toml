@@ -1,0 +1,17 @@
+[tool.bandit]
+exclude_dirs = ["tests", "venv", ".venv", "__pycache__"]
+skips = ["B101"]  # Skip assert_used test
+tests = ["app/"]
+
+[tool.bandit.assert_used]
+skips = ["*/test_*.py", "*/tests/*"]
+
+[tool.pip-audit]
+format = "json"
+output = "pip-audit-report.json"
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: mark a test as an end-to-end test",
+]
+asyncio_mode = "auto"

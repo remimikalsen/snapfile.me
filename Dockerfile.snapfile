@@ -1,21 +1,30 @@
 FROM python:3.13-slim
 
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
 COPY /app /app
 COPY requirements.txt /app
 COPY VERSION /app
 
 WORKDIR /app
 
-RUN mkdir /app/uploads
-RUN mkdir /app/database
+# Create directories and set ownership
+RUN mkdir -p /app/uploads /app/database && \
+    chown -R appuser:appuser /app
 
-RUN pip install --no-cache-dir -r requirements.txt
+# Upgrade pip, setuptools, and wheel before installing dependencies
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Expose the APP_PORT environment variable, default to 8080
 EXPOSE 8080
 
 # Define environment variable
 ENV PYTHONUNBUFFERED=1
+
+# Switch to non-root user
+USER appuser
 
 # Run app.py when the container launches
 CMD ["python", "app.py"]
