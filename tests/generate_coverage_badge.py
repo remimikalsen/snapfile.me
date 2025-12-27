@@ -42,7 +42,7 @@ def main():
     args = sys.argv[1:]
     if len(args) > 1:
         sys.exit(f"Usage: {sys.argv[0]} [print]")
-    
+
     print_badge = (len(args) == 1 and args[0] == "print")
     if len(args) == 1 and args[0] != "print":
         sys.exit(f"Usage: {sys.argv[0]} [print]")

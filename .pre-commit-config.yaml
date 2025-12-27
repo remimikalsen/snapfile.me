@@ -1,0 +1,81 @@
+# Pre-commit hooks configuration
+# Install: pip install pre-commit
+# Setup: pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Local hooks for security scanning (using locally installed tools)
+  - repo: local
+    hooks:
+      - id: trivy-fs-scan
+        name: Trivy filesystem scan (CRITICAL)
+        entry: bash
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        args:
+          - -c
+          - |
+            echo "Running Trivy filesystem scan..."
+            trivy fs \
+              --scanners vuln,secret,misconfig \
+              --severity CRITICAL \
+              --exit-code 1 \
+              --ignorefile .trivyignore \
+              . || {
+                echo
+                echo "❌ Trivy found CRITICAL issues. Fix or whitelist (with justification) before pushing."
+                exit 1
+              }
+
+      - id: opengrep
+        name: OpenGrep SAST scan
+        entry: opengrep scan --config auto --quiet
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: pip-audit
+        name: pip-audit - Python dependency vulnerability scanner
+        entry: pip-audit --requirement requirements.txt
+        language: python
+        pass_filenames: false
+        additional_dependencies: [pip-audit]
+
+      - id: bandit
+        name: bandit - Python security linter
+        entry: bandit -r app/ -f screen
+        language: python
+        pass_filenames: false
+        additional_dependencies: ["bandit[toml]"]
+
+  # Python code quality
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-json
+      - id: check-toml
+      - id: detect-private-key
+
+  # Python formatting
+  - repo: https://github.com/psf/black
+    rev: 25.11.0
+    hooks:
+      - id: black
+        language_version: python3
+        args: ['--line-length=100']
+        files: ^app/
+
+  # Python linting (flake8) - matches pipeline configuration
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.3.0
+    hooks:
+      - id: flake8
+        additional_dependencies: [flake8-pyproject]
+        args: ['--max-line-length=88', '--extend-ignore=E501']
+        files: ^app/

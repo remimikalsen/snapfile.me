@@ -12,57 +12,55 @@ jobs:
   check_and_test:
     runs-on: ubuntu-latest
     steps:
-
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
 
-      - name: Attempt to pull testbed image for building speedup
-        run: |
-          docker pull ghcr.io/remimikalsen/python-testbed:v1 || echo "Cached image not found; will build a new one."
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
 
-      - name: Build testbed docker image from cache
+      - name: Install dependencies
         run: |
-          docker build \
-            --cache-from ghcr.io/remimikalsen/python-testbed:v1 \
-            -t ghcr.io/remimikalsen/python-testbed:v1 \
-            -f tests-docker/Dockerfile.testbed .
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          pip install -r tests/requirements-tests.txt
 
-      - name: Build test docker image
+      - name: Run pip-audit before tests
         run: |
-          docker build -t snapfile-tests -f tests-docker/Dockerfile.tests .
+          echo "Running pip-audit to check for vulnerabilities..."
+          pip install pip-audit
+          pip-audit --requirement requirements.txt --format json --output pip-audit-results.json || \
+            (echo "::error::pip-audit found vulnerabilities in Python dependencies." && \
+             echo "Please review and fix vulnerabilities before proceeding." && \
+             pip-audit --requirement requirements.txt --format table && exit 1)
+          echo "pip-audit passed - no vulnerabilities found in Python dependencies."
 
       - name: Run linter
         run: |
-          docker run --rm snapfile-tests lint
+          echo "Running flake8 linter..."
+          pip install flake8 flake8-pyproject
+          flake8 app/ --max-line-length=88 --extend-ignore=E501 || \
+            (echo "::error::Linting failed. Please fix the issues." && exit 1)
+          echo "Linting passed."
+
+      - name: Install Playwright browsers
+        run: |
+          playwright install --with-deps
 
       - name: Run unit tests and capture test coverage output
         id: run_tests
         run: |
-          # Run the container and capture the full output
-          OUTPUT=$(docker run --rm snapfile-tests test-unit)
-          echo "$OUTPUT" > docker_output.txt
+          pytest tests/unit/ -v --cov=app --cov-report=xml --cov-report=term
 
-          # Extract and print the pytest output
-          PYTEST_OUTPUT=$(awk '/-----BEGIN PYTEST OUTPUT-----/{flag=1; next} /-----END PYTEST OUTPUT-----/{flag=0} flag' docker_output.txt)
-          echo "-----BEGIN PYTEST OUTPUT-----"
-          echo "$PYTEST_OUTPUT"
-          echo "-----END PYTEST OUTPUT-----"
+      - name: Run E2E tests
+        run: |
+          pytest tests/e2e/ -v --e2e
 
-          # Extract the badge SVG and store it as tests/coverage-badge.svg
-          awk '/-----BEGIN BADGE SVG-----/{flag=1; next} /-----END BADGE SVG-----/{flag=0} flag' docker_output.txt > coverage-badge.svg
-
-          # Extract the coverage XML and store it as tests/coverage.xml
-          awk '/-----BEGIN COVERAGE XML-----/{flag=1; next} /-----END COVERAGE XML-----/{flag=0} flag' docker_output.txt > coverage.xml
-
-      - name: Upload coverage artifacts
+      - name: Upload coverage reports
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report-${{ github.event.pull_request.number }}
           path: |
-            coverage-badge.svg
-            coverage.xml
-          retention-days: 30 
-
-      - name: Run E2E tests
-        run: |
-          docker run --rm snapfile-tests test-e2e
+            tests/coverage.xml
+          retention-days: 30

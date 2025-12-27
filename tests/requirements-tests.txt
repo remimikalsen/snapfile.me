@@ -1,7 +1,7 @@
-pytest 
+pytest
 pytest-asyncio
 pytest-aiohttp
-playwright 
+playwright
 pytest-playwright
 flake8
 flake8-pyproject

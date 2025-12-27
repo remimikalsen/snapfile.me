@@ -24,11 +24,11 @@
     <!-- Dark Mode Toggle Button -->
     <button title="Toggle dark Mode" id="theme-toggle" aria-label="Toggle Dark Mode">🌙</button>
   </header>
-  
+
   <main>
     {% block content %}{% endblock %}
   </main>
-  
+
   <footer>
     <p>
       Version <a href="https://github.com/remimikalsen/snapfile.me/pkgs/container/snapfile">{{ VERSION }}</a>.
@@ -42,10 +42,10 @@
       View the source code on <a href="https://github.com/remimikalsen/snapfile.me" target="_blank">GitHub.com</a>
     </p>
   </footer>
-  
+
   {% block extra_scripts %}{% endblock %}
-  
-  <script>
+
+  <script nonce="{{ CSP_NONCE }}">
     // Check for a saved theme or default to 'light'
     const toggleButton = document.getElementById('theme-toggle');
     const currentTheme = localStorage.getItem('theme') || 'light';
@@ -53,7 +53,7 @@
       document.body.classList.add('dark');
       toggleButton.textContent = '☀️';
     }
-    
+
     toggleButton.addEventListener('click', () => {
       document.body.classList.toggle('dark');
       const newTheme = document.body.classList.contains('dark') ? 'dark' : 'light';

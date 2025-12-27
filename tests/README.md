@@ -9,4 +9,3 @@
   - `pytest -m "not e2e"` for Unit tests. The app doesn't need to run
 
 - You will get automatic coverage reports when running pytest
-
