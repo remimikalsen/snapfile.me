@@ -53,9 +53,53 @@ jobs:
         run: |
           pytest tests/unit/ -v --cov=app --cov-report=xml --cov-report=term
 
+      - name: Start application for E2E tests
+        run: |
+          # Set environment variables for test directories
+          export UPLOAD_DIR=$(pwd)/test_uploads
+          export DATABASE_DIR=$(pwd)/test_database
+          # Start the app in the background
+          cd app
+          python app.py > ../app.log 2>&1 &
+          APP_PID=$!
+          echo "APP_PID=$APP_PID" >> $GITHUB_ENV
+          echo "Waiting for app to start (PID: $APP_PID)..."
+          # Wait for app to be ready (max 30 seconds)
+          for i in {1..30}; do
+            if curl -f http://localhost:8080/ > /dev/null 2>&1; then
+              echo "App started successfully!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "App failed to start. Logs:"
+              cat ../app.log
+              exit 1
+            fi
+            sleep 1
+          done
+        env:
+          BASE_URL: http://localhost:8080
+
       - name: Run E2E tests
         run: |
-          pytest tests/e2e/ -v --e2e
+          export BASE_URL=http://localhost:8080
+          pytest tests/e2e/ -v -m e2e
+
+      - name: Stop application
+        if: always()
+        run: |
+          if [ ! -z "$APP_PID" ]; then
+            echo "Stopping app (PID: $APP_PID)"
+            kill $APP_PID 2>/dev/null || true
+            sleep 2
+            # Force kill if still running
+            kill -9 $APP_PID 2>/dev/null || true
+          fi
+          # Show app logs for debugging
+          if [ -f app.log ]; then
+            echo "=== App logs ==="
+            cat app.log
+          fi
 
       - name: Upload coverage reports
         uses: actions/upload-artifact@v4
