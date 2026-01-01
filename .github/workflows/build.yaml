@@ -14,25 +14,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-      - name: Start SSH agent with deploy key
-        uses: webfactory/ssh-agent@v0.5.3
+      - name: Generate GitHub App token
+        id: app_token
+        uses: actions/create-github-app-token@v2
         with:
-          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
-
-      - name: Add GitHub to known_hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Check out repository
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-
-      - name: Update remote URL to use SSH
-        env:
-          REPOSITORY: ${{ github.repository }}
-        run: git remote set-url origin git@github.com:$REPOSITORY.git
+          token: ${{ steps.app_token.outputs.token }}
 
       - name: Determine next version from last tag
         id: semver
