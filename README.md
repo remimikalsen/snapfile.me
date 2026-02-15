@@ -115,6 +115,10 @@ docker run -d \
   snapfile-image
 ```
 
+#### Container health check
+
+The Docker image includes a built-in `HEALTHCHECK` instruction that pings the app every 30 seconds. This means Docker automatically tracks whether the container is healthy. You can see the status in `docker ps` (shown as `healthy`, `unhealthy`, or `starting`). Combined with `restart: unless-stopped` in Docker Compose, Docker will automatically restart the container if the health check fails repeatedly.
+
 ### Using a pre-built image
 
 If you just want to use the latest version, use the pre-built images. Check out `docker-compose.yml` for a reference.
