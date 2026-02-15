@@ -33,6 +33,8 @@ Snapfile is asynchronous by nature, allowing it to scale efficiently even on mod
 - [Configuration](#configuration)
 - [Accessing the Web Interface](#accessing-the-web-interface)
 - [Developer Notes](#developer-notes)
+  - [Running locally for development](#running-locally-for-development)
+  - [Managing Python dependencies](#managing-python-dependencies)
 
 
 
@@ -196,22 +198,109 @@ trivy fs .
 ## Developer notes
 This app is set up with automatic versioning with git tags, Docker image deployment and app deployment. That's nice to know if you fork it! Read about [building and deploying automatically](https://theawesomegarage.com/blog/build-and-deploy-locally-using-github-actions-and-webhooks).
 
+### Running locally for development
 
-### Python dependencies
+You can run Snapfile directly on your machine (without Docker) with automatic reload on file changes.
 
-Set up a Python virtual environment for local development to manage Python package versions correctly:
+**1. Create and activate a Python virtual environment:**
 
-- `pip-tools` is used to compile canonical requirements in `requirements.in`.
-- `requirements.txt` is generated using:
+```sh
+python3 -m venv venv
+source venv/bin/activate
+```
 
-  ```sh
-  pip-compile requirements.in
-  ```
+**2. Install dependencies:**
 
-- To upgrade `requirements.txt`, run:
+```sh
+pip install -r requirements.txt
+```
 
-  ```sh
-  pip-compile --upgrade requirements.in
-  pip install -r requirements.txt
-  pip-sync requirements.txt
-  ```
+**3. Install the file watcher:**
+
+```sh
+pip install watchfiles
+```
+
+**4. Create local upload and database directories:**
+
+```sh
+mkdir -p /tmp/snapfile/uploads /tmp/snapfile/database
+```
+
+**5. Start the app with auto-reload:**
+
+```sh
+cd app
+UPLOAD_DIR=/tmp/snapfile/uploads DATABASE_DIR=/tmp/snapfile/database watchfiles "python app.py"
+```
+
+The app will be available at `http://localhost:8080`.
+
+`watchfiles` watches the current working directory (`app/`) and all its subdirectories for changes to any file type — including Python files, HTML templates, static assets, etc. The app automatically restarts whenever a change is detected.
+
+> **Note:** You must run the command from the `app/` directory, as the app resolves paths to `static/` and `templates/` relative to the working directory.
+
+### Managing Python dependencies
+
+The project uses `pip-tools` to keep dependencies pinned and reproducible. The canonical dependency list lives in `requirements.in`, and `requirements.txt` is the fully resolved lockfile generated from it.
+
+**Install `pip-tools`** (provides `pip-compile` and `pip-sync`):
+
+```sh
+pip install pip-tools
+```
+
+**Regenerate the lockfile** (resolve current versions without upgrading):
+
+```sh
+pip-compile requirements.in
+```
+
+**Audit dependencies for known vulnerabilities:**
+
+```sh
+pip-audit -r requirements.txt
+```
+
+`pip-audit` is already included as a project dependency. It checks all packages against the Python Packaging Advisory Database (PyPI) and OSV. Fix any reported vulnerabilities before deploying.
+
+**Upgrade dependencies safely:**
+
+It's recommended to audit before and after upgrading, and to test the app between steps.
+
+```sh
+# 1. Check for vulnerabilities in current dependencies
+pip-audit -r requirements.txt
+
+# 2. Upgrade all dependencies to their latest compatible versions
+pip-compile --upgrade requirements.in
+
+# 3. Install the upgraded dependencies
+pip install -r requirements.txt
+
+# 4. Sync your environment (removes packages not in requirements.txt)
+pip-sync requirements.txt
+
+# 5. Audit the upgraded dependencies for new vulnerabilities
+pip-audit -r requirements.txt
+
+# 6. Run the app and verify everything works
+cd app
+UPLOAD_DIR=/tmp/snapfile/uploads DATABASE_DIR=/tmp/snapfile/database python app.py
+```
+
+To upgrade a **single package** instead of everything:
+
+```sh
+pip-compile --upgrade-package aiohttp requirements.in
+pip install -r requirements.txt
+pip-sync requirements.txt
+```
+
+**Run static security analysis** on the application code:
+
+```sh
+bandit -r app/
+```
+
+`bandit` is also included as a project dependency and scans Python code for common security issues.
