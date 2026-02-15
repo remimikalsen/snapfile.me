@@ -23,5 +23,13 @@ services:
       - ANALYTICS_SCRIPT_CSP=
       - HTTPS_ONLY=false
     volumes:
-      - /snapfile/uploads:/app/uploads
-      - /snapfile/database:/app/database
+      - snapfile-uploads:/app/uploads
+      - snapfile-database:/app/database
+      # To use host bind mounts instead of Docker volumes, replace the above with:
+      # - /snapfile/uploads:/app/uploads
+      # - /snapfile/database:/app/database
+      # Make sure the host directories exist and are writable by the container user.
+
+volumes:
+  snapfile-uploads:
+  snapfile-database:
