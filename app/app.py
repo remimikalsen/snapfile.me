@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 from aiohttp import web
 from aiohttp.abc import AbstractAccessLogger
+from yarl import URL
 import aiohttp_jinja2
 import jinja2
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -342,7 +343,7 @@ def public_base_url(request):
         scheme = "https"
     if not _HOST_RE.match(host):
         return ""
-    return f"{scheme}://{host}"
+    return str(URL.build(scheme=scheme, authority=host))
 
 
 class ClientIPAccessLogger(AbstractAccessLogger):
