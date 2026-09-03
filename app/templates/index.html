@@ -23,6 +23,16 @@
       The link will be valid for {{ file_expiry_hours }} hours, {{ file_expiry_minutes }} minutes. <br />
       Maximum file size is {{ max_file_size }} MB
     </p>
+    <details class="cli-help">
+      <summary>Prefer the command line? Use curl or wget</summary>
+      <p>Upload straight from a terminal and get a single-use download link back:</p>
+      <pre><code id="cli-command">curl -T ./report.pdf {{ base_url }}/</code><button id="copy-cli-command-button" class="success-button" aria-label="Copy command to clipboard" title="Copy command"><span class="material-icons">content_copy</span></button></pre>
+      <p>
+        The link is printed on the first line, ready to paste or pipe, and your remaining quota on the second.
+        The same quota, size limit and expiry apply as for uploads from this page.
+        <a href="https://github.com/remimikalsen/snapfile.me#command-line-usage" target="_blank" rel="noopener">More examples</a>.
+      </p>
+    </details>
   </div>
 
   <div id="snapfile-status">
@@ -76,6 +86,11 @@
 
     // File input change handling
     fileInput.addEventListener('change', uploadFile);
+
+    // Copy the command line example to the clipboard
+    document.getElementById('copy-cli-command-button').addEventListener('click', () => {
+      copyToClipboard(document.getElementById('cli-command').innerText);
+    });
 
     function uploadFile() {
       if (fileInput.files.length === 0) {
@@ -244,7 +259,7 @@
 
     function copyToClipboard(text) {
       navigator.clipboard.writeText(text).then(() => {
-        showLinkCopyNotification('Link copied to clipboard!');
+        showLinkCopyNotification('Copied to clipboard!');
       }).catch(err => {
         console.error('Error copying text: ', err);
       });

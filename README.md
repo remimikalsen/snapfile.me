@@ -32,6 +32,7 @@ Snapfile is asynchronous by nature, allowing it to scale efficiently even on mod
   - [Using a pre-build image](#using-a-pre-built-image)
 - [Configuration](#configuration)
 - [Accessing the Web Interface](#accessing-the-web-interface)
+- [Command line usage](#command-line-usage)
 - [Developer Notes](#developer-notes)
   - [Running locally for development](#running-locally-for-development)
   - [Managing Python dependencies](#managing-python-dependencies)
@@ -42,7 +43,7 @@ Snapfile is asynchronous by nature, allowing it to scale efficiently even on mod
 
 ### File upload
 
-- Users can upload files on the front page.
+- Users can upload files on the front page, or from a terminal with `curl -T file https://your-snapfile/` (see [Command line usage](#command-line-usage)).
 - The file is stored on the server.
 - A unique download code is generated and stored with the file information in a SQLite database.
 - The user receives a download link that can be used to download the file once.
@@ -143,6 +144,7 @@ There are ample configuration opportunities whether you run through Docker or Do
 - `PURGE_INTERVAL_MINUTES`: Interval in minutes for purging expired files and cleaning up the database (default: 5 minutes).
 - `CONSISTENCY_CHECK_INTERVAL_MINUTES`: Interval in minutes for checking database/file consistency and cleaning up (default: 1440 minutes or 24 hours).
 - `TRUSTED_PROXY_COUNT`: Number of reverse proxies in front of Snapfile that append to `X-Forwarded-For` (default: 1). Set to `0` if clients connect directly, otherwise a client can forge the header and bypass the upload quota. See [Reverse proxies and client IPs](#reverse-proxies-and-client-ips).
+- `PUBLIC_BASE_URL`: Absolute URL clients use to reach Snapfile, e.g. `https://snapfile.me`. Used to build the links returned to command line uploads and shown in the front page helper. When empty (default) the URL is derived from the request's `Host` header, plus `X-Forwarded-Proto` / `X-Forwarded-Host` when `TRUSTED_PROXY_COUNT` is greater than 0.
 - `INTERNAL_IP`: Internal IP address for direct download links.
 - `INTERNAL_PORT`: Internal port for direct download links.
 - `ANALYTICS_SCRIPT`: The complete script tag needed for tracking from e.g. Plausible (default: empty)
@@ -173,6 +175,46 @@ The provided `docker-compose.yml` runs the container with `no-new-privileges`, d
 ## Accessing the web interface
 
 Visit http://localhost:8080
+
+## Command line usage
+
+You don't need a browser to share a file. `PUT` the raw file body to `/` or `/<filename>` and Snapfile answers in plain text: the absolute, single-use download link on the first line and your remaining quota on the second. That makes it trivial to use from scripts, servers without a desktop, or a quick `ssh` session.
+
+```sh
+# Upload a file; the file name is taken from the URL path (curl -T appends it for you)
+curl -T ./report.pdf https://snapfile.me/
+# https://snapfile.me/download/Ab3dEf9hIjKl
+# You have 4 uploads left. Quota resets in 0 hours, 59 minutes.
+
+# Give the file a different name
+curl -T ./report.pdf https://snapfile.me/q3-report.pdf
+
+# Pipe from stdin
+tar cz ./project | curl -T - https://snapfile.me/project.tgz
+
+# Capture just the link in a variable
+LINK=$(curl -sS --fail -T ./report.pdf https://snapfile.me/ | head -n1)
+```
+
+Other tools work the same way:
+
+```sh
+# wget
+wget -qO- --method=PUT --body-file=./report.pdf https://snapfile.me/report.pdf
+
+# Python
+python -c "import sys,urllib.request as u; print(u.urlopen(u.Request('https://snapfile.me/report.pdf', data=open('report.pdf','rb').read(), method='PUT')).read().decode())"
+```
+
+Whoever receives the link downloads it with `curl -OJ <link>` (or a browser). The `X-Landing-Url` response header carries the link to the human-friendly landing page for the same file, which is safer to post in chat tools that preview links.
+
+Things to know:
+
+- The same quota, size limit and expiry apply as for uploads from the web page.
+- A file larger than `MAX_FILE_SIZE` is refused with `413` before the body is sent when the client uses `Expect: 100-continue` (curl does for bodies over 1 MB). Quota exhaustion returns `429`.
+- File names are sanitised on the server; a missing name (for example `curl -T - https://snapfile.me/`) becomes `file`.
+- The multipart endpoint the web page uses also works from the shell, but returns a relative path: `curl -F file=@report.pdf https://snapfile.me/upload`.
+- Set `PUBLIC_BASE_URL` if the links come back with the wrong scheme or host, for example when the proxy in front of Snapfile does not send `X-Forwarded-Proto`.
 
 ## Security
 
