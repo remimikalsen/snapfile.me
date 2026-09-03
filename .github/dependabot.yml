@@ -6,14 +6,14 @@ updates:
       interval: "weekly"
     # Wait a few days before adopting a new release so obviously bad releases get pulled first.
     cooldown:
-      default-days: 5
+      default-days: 7
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
     # Wait a few days before adopting a new release so obviously bad releases get pulled first.
     cooldown:
-      default-days: 5
+      default-days: 7
     groups:
       python-dependencies:
         patterns:
@@ -24,4 +24,4 @@ updates:
       interval: "weekly"
     # Wait a few days before adopting a new release so obviously bad releases get pulled first.
     cooldown:
-      default-days: 5
+      default-days: 7
