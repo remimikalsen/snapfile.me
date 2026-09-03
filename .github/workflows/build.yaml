@@ -283,12 +283,14 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr_meta.outputs.number }}
         run: |
-          # Fetch PR commits using GitHub API and count them using Python
-          PR_COMMITS=$(curl -s \
+          # Fetch PR commits using GitHub API into a file, then count them using Python
+          curl -sf \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/$REPOSITORY/pulls/$PR_NUMBER/commits" | \
-            python3 -c "import sys, json; print(len(json.load(sys.stdin)))")
+            -o pr_commits.json \
+            "https://api.github.com/repos/$REPOSITORY/pulls/$PR_NUMBER/commits"
+          PR_COMMITS=$(python3 -c "import json; print(len(json.load(open('pr_commits.json'))))")
+          rm -f pr_commits.json
 
           echo "Commit count: $PR_COMMITS"
 

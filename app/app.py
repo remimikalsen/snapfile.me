@@ -453,8 +453,9 @@ async def landing_page_download(request):
                 "filename": filename,
                 "download_link": download_link,
                 "download_code": download_code,
-                "internal_ip": INTERNAL_IP,
-                "internal_port": INTERNAL_PORT,
+                # Plain HTTP by design: this link targets the LAN address of the
+                # server for clients on the same network, where TLS is not available.
+                "internal_url": f"http://{INTERNAL_IP}:{INTERNAL_PORT}{download_link}",
             }
             return aiohttp_jinja2.render_template(
                 "download.html", request, context, app_key=APP_KEY
