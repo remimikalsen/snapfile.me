@@ -3,25 +3,30 @@ FROM python:3.14-slim
 # Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-COPY /app /app
-COPY requirements.txt /app
-COPY VERSION /app
-
 WORKDIR /app
 
-# Create directories and set ownership
-RUN mkdir -p /app/uploads /app/database && \
-    chown -R appuser:appuser /app
+# Install dependencies first so the layer is cached independently of code changes.
+# Only runtime dependencies are installed; development/security tooling lives in
+# requirements-dev.txt and is deliberately kept out of the production image.
+# pip itself is removed afterwards: it is not needed at runtime and its vendored
+# libraries would otherwise show up in vulnerability scans of the image.
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip uninstall -y pip
 
-# Upgrade pip, setuptools, and wheel before installing dependencies
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+# Application code stays owned by root so the app user cannot modify it at runtime.
+# Only the data directories are writable by appuser.
+COPY app /app
+COPY VERSION /app/VERSION
+RUN mkdir -p /app/uploads /app/database && \
+    chown appuser:appuser /app/uploads /app/database
 
 # Expose the APP_PORT environment variable, default to 8080
 EXPOSE 8080
 
-# Define environment variable
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
 # Switch to non-root user
 USER appuser

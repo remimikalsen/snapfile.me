@@ -1,7 +1,6 @@
 [tool.bandit]
 exclude_dirs = ["tests", "venv", ".venv", "__pycache__"]
 skips = ["B101"]  # Skip assert_used test
-tests = ["app/"]
 
 [tool.bandit.assert_used]
 skips = ["*/test_*.py", "*/tests/*"]

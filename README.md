@@ -109,7 +109,8 @@ docker run -d \
   -e PURGE_INTERVAL_MINUTES=5 \
   -e CONSISTENCY_CHECK_INTERVAL_MINUTES=1440 \
   -e INTERNAL_IP=127.0.0.1 \
-  -e INTERNAL_PORT=127.0.0.1 \
+  -e INTERNAL_PORT=8080 \
+  -e TRUSTED_PROXY_COUNT=1 \
   -v /snapfile/uploads:/app/uploads \
   -v /snapfile/database:/app/database \
   snapfile-image
@@ -141,6 +142,7 @@ There are ample configuration opportunities whether you run through Docker or Do
 - `QUOTA_RENEWAL_MINUTES`: Interval in minutes for resetting the usage quota (default: 60 minutes).
 - `PURGE_INTERVAL_MINUTES`: Interval in minutes for purging expired files and cleaning up the database (default: 5 minutes).
 - `CONSISTENCY_CHECK_INTERVAL_MINUTES`: Interval in minutes for checking database/file consistency and cleaning up (default: 1440 minutes or 24 hours).
+- `TRUSTED_PROXY_COUNT`: Number of reverse proxies in front of Snapfile that append to `X-Forwarded-For` (default: 1). Set to `0` if clients connect directly, otherwise a client can forge the header and bypass the upload quota. See [Reverse proxies and client IPs](#reverse-proxies-and-client-ips).
 - `INTERNAL_IP`: Internal IP address for direct download links.
 - `INTERNAL_PORT`: Internal port for direct download links.
 - `ANALYTICS_SCRIPT`: The complete script tag needed for tracking from e.g. Plausible (default: empty)
@@ -151,6 +153,22 @@ These environment variables allow the app to be configured for different deploym
 INTERNAL_IP and INTERNAL_PORT are configurable in order for you to configure a direct network internal download link if you are on the same network as Snapfile - avoiding proxies for maximum speed.
 
 Also make sure that the uploads and database directories exist on your computer to persist files and the database.
+
+### Reverse proxies and client IPs
+
+Snapfile rate-limits uploads per (hashed) client IP. When it runs behind a reverse proxy, every request arrives from the proxy's address, so Snapfile reads the real client address from the `X-Forwarded-For` header instead.
+
+Each proxy *appends* the address it received the request from, so the trustworthy entry is the one added by your own proxy, counted from the right. `TRUSTED_PROXY_COUNT` tells Snapfile how many proxies to trust:
+
+- `1` (default): one proxy such as Nginx, Traefik or Caddy directly in front of Snapfile.
+- `2`: for example a CDN in front of your own proxy.
+- `0`: clients connect directly to Snapfile. The header is ignored completely.
+
+Anything to the left of the trusted entries is client-supplied and never used, so a forged header cannot be used to dodge the quota.
+
+### Container hardening
+
+The provided `docker-compose.yml` runs the container with `no-new-privileges`, drops all Linux capabilities and mounts the root filesystem read-only; only the two data volumes are writable. The image runs as a non-root user, keeps the application code root-owned, and contains only the runtime dependencies (no pip, no development tooling).
 
 ## Accessing the web interface
 
@@ -164,10 +182,10 @@ Snapfile.me implements comprehensive security measures:
 - **Input Validation:** All user inputs validated and sanitized
 - **SQL Injection Protection:** All database queries use parameterized statements
 - **XSS Protection:** CSP with nonces, template auto-escaping, analytics script sanitization
-- **File Upload Security:** Filename sanitization, size limits, path traversal protection
-- **Rate Limiting:** IP-based quota system with hashed IP addresses
-- **Docker Security:** Non-root user, minimal base image, regular vulnerability scanning
-- **Automated Security Scanning:** Trivy, pip-audit, bandit, and OpenGrep integrated in CI/CD
+- **File Upload Security:** Filename sanitization, size limits, path traversal protection, downloads always served as opaque attachments, partial uploads cleaned up immediately
+- **Rate Limiting:** IP-based quota system with hashed IP addresses, atomic quota accounting, configurable trust in `X-Forwarded-For`
+- **Docker Security:** Non-root user, root-owned code, read-only root filesystem, no capabilities, minimal base image without pip, regular vulnerability scanning
+- **Automated Security Scanning:** Trivy, pip-audit, bandit, and OpenGrep integrated in CI/CD; GitHub Actions pinned to commit SHAs; Dependabot updates
 - **SBOM Generation:** Software Bill of Materials (CycloneDX and SPDX) generated for releases
 
 For detailed security information, see [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
@@ -194,9 +212,9 @@ pre-commit install
 pre-commit run --all-files
 
 # Run individual security tools
-pip-audit --requirement requirements.txt
-bandit -r app/
-trivy fs .
+pip-audit -r requirements.txt -r requirements-dev.txt
+bandit -c pyproject.toml -r app/
+trivy fs --skip-dirs venv .
 ```
 
 ## Developer notes
@@ -242,31 +260,35 @@ The app will be available at `http://localhost:8080`.
 
 `watchfiles` watches the current working directory (`app/`) and all its subdirectories for changes to any file type — including Python files, HTML templates, static assets, etc. The app automatically restarts whenever a change is detected.
 
-> **Note:** You must run the command from the `app/` directory, as the app resolves paths to `static/` and `templates/` relative to the working directory.
+> **Note:** Templates and static files are resolved relative to `app.py`, so the app can be started from any directory. Running from `app/` simply keeps the watcher scoped to the application files.
 
 ### Managing Python dependencies
 
-The project uses `pip-tools` to keep dependencies pinned and reproducible. The canonical dependency list lives in `requirements.in`, and `requirements.txt` is the fully resolved lockfile generated from it.
+The project uses `pip-tools` to keep dependencies pinned and reproducible. There are two dependency sets:
 
-**Install `pip-tools`** (provides `pip-compile` and `pip-sync`):
+- `requirements.in` → `requirements.txt`: runtime dependencies. This is all that goes into the Docker image.
+- `requirements-dev.in` → `requirements-dev.txt`: development and security tooling (`pip-audit`, `bandit`, `pip-tools`). It is constrained to the runtime lockfile so both sets always agree on shared packages.
+
+**Install the development tooling** (provides `pip-compile`, `pip-sync`, `pip-audit` and `bandit`):
 
 ```sh
-pip install pip-tools
+pip install -r requirements-dev.txt
 ```
 
-**Regenerate the lockfile** (resolve current versions without upgrading):
+**Regenerate the lockfiles** (resolve current versions without upgrading):
 
 ```sh
-pip-compile requirements.in
+pip-compile --strip-extras requirements.in
+pip-compile --strip-extras requirements-dev.in
 ```
 
 **Audit dependencies for known vulnerabilities:**
 
 ```sh
-pip-audit -r requirements.txt
+pip-audit -r requirements.txt -r requirements-dev.txt
 ```
 
-`pip-audit` is already included as a project dependency. It checks all packages against the Python Packaging Advisory Database (PyPI) and OSV. Fix any reported vulnerabilities before deploying.
+`pip-audit` checks all packages against the Python Packaging Advisory Database (PyPI) and OSV. Fix any reported vulnerabilities before deploying. Dependabot is configured to open weekly pull requests for Python packages, GitHub Actions and the Docker base image.
 
 **Upgrade dependencies safely:**
 
@@ -277,16 +299,17 @@ It's recommended to audit before and after upgrading, and to test the app betwee
 pip-audit -r requirements.txt
 
 # 2. Upgrade all dependencies to their latest compatible versions
-pip-compile --upgrade requirements.in
+pip-compile --upgrade --strip-extras requirements.in
+pip-compile --upgrade --strip-extras requirements-dev.in
 
 # 3. Install the upgraded dependencies
-pip install -r requirements.txt
+pip install -r requirements.txt -r requirements-dev.txt
 
-# 4. Sync your environment (removes packages not in requirements.txt)
-pip-sync requirements.txt
+# 4. Sync your environment (removes packages not in the lockfiles)
+pip-sync requirements.txt requirements-dev.txt
 
 # 5. Audit the upgraded dependencies for new vulnerabilities
-pip-audit -r requirements.txt
+pip-audit -r requirements.txt -r requirements-dev.txt
 
 # 6. Run the app and verify everything works
 cd app
@@ -296,15 +319,16 @@ UPLOAD_DIR=/tmp/snapfile/uploads DATABASE_DIR=/tmp/snapfile/database python app.
 To upgrade a **single package** instead of everything:
 
 ```sh
-pip-compile --upgrade-package aiohttp requirements.in
-pip install -r requirements.txt
-pip-sync requirements.txt
+pip-compile --upgrade-package aiohttp --strip-extras requirements.in
+pip-compile --strip-extras requirements-dev.in
+pip install -r requirements.txt -r requirements-dev.txt
+pip-sync requirements.txt requirements-dev.txt
 ```
 
 **Run static security analysis** on the application code:
 
 ```sh
-bandit -r app/
+bandit -c pyproject.toml -r app/
 ```
 
-`bandit` is also included as a project dependency and scans Python code for common security issues.
+`bandit` scans Python code for common security issues.

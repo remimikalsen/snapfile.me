@@ -37,14 +37,14 @@ repos:
 
       - id: pip-audit
         name: pip-audit - Python dependency vulnerability scanner
-        entry: pip-audit --requirement requirements.txt
+        entry: pip-audit --requirement requirements.txt --requirement requirements-dev.txt
         language: python
         pass_filenames: false
         additional_dependencies: [pip-audit]
 
       - id: bandit
         name: bandit - Python security linter
-        entry: bandit -r app/ -f screen
+        entry: bandit -c pyproject.toml -r app/ -f screen
         language: python
         pass_filenames: false
         additional_dependencies: ["bandit[toml]"]
@@ -64,7 +64,7 @@ repos:
 
   # Python formatting
   - repo: https://github.com/psf/black
-    rev: 25.11.0
+    rev: 26.5.1
     hooks:
       - id: black
         language_version: python3

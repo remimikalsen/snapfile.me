@@ -1,0 +1,5 @@
+# Development / security tooling. Not installed in the production image.
+-c requirements.txt
+pip-audit
+bandit[toml]
+pip-tools

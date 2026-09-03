@@ -1,10 +1,12 @@
 import asyncio
+import logging
 import os
 import uuid
 import secrets
 import string
 import hashlib
 import re
+import time
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
@@ -18,8 +20,10 @@ import aiofiles
 import aiofiles.os
 from werkzeug.utils import secure_filename
 
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Determine the application version from file
-VERSION_FILE_PATH = os.path.join(os.path.dirname(__file__), "VERSION")
+VERSION_FILE_PATH = os.path.join(APP_DIR, "VERSION")
 VERSION = "Development"
 if os.path.isfile(VERSION_FILE_PATH):
     with open(VERSION_FILE_PATH, "r") as version_file:
@@ -44,6 +48,9 @@ QUOTA_RENEWAL_MINUTES = int(
 )  # Default to 60 minutes (1 hour)
 PURGE_INTERVAL_MINUTES = int(os.getenv("PURGE_INTERVAL_MINUTES", 5))  # Cleanup every 5 minutes
 CONSISTENCY_CHECK_INTERVAL_MINUTES = int(os.getenv("CONSISTENCY_CHECK_INTERVAL_MINUTES", 1440))
+# Number of reverse proxies in front of the app that append to X-Forwarded-For.
+# 0 disables X-Forwarded-For entirely (use when clients connect directly).
+TRUSTED_PROXY_COUNT = int(os.getenv("TRUSTED_PROXY_COUNT", 1))
 INTERNAL_IP = os.getenv("INTERNAL_IP", "")
 INTERNAL_PORT = os.getenv("INTERNAL_PORT", "")
 ANALYTICS_SCRIPT_RAW = os.getenv("ANALYTICS_SCRIPT", "")
@@ -60,6 +67,11 @@ UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/app/uploads")
 DATABASE_DIR = os.getenv("DATABASE_DIR", "/app/database")
 DATABASE_PATH = os.path.join(DATABASE_DIR, "file_links.db")
 APP_KEY = "aiohttp_jinja2_environment"
+# Files in UPLOAD_DIR that are not in the database are only removed once they have been
+# untouched for this long, so an upload that is still streaming to disk is never deleted.
+ORPHAN_FILE_GRACE_SECONDS = 60 * 60
+
+logger = logging.getLogger("snapfile")
 
 # Create directories if they don't exist (skip if permission denied, e.g., in CI)
 try:
@@ -102,6 +114,27 @@ async def async_listdir(path):
     return await asyncio.to_thread(os.listdir, path)
 
 
+async def remove_file_quietly(path):
+    """Delete a file if it exists, logging (not raising) on failure."""
+    try:
+        await aiofiles.os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        logger.warning("Could not remove %s: %s", path, exc)
+
+
+# Keep strong references to fire-and-forget tasks so they are not garbage collected mid-run.
+_background_tasks = set()
+
+
+def spawn_background_task(coro):
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
+
 async def init_db():
     """Initialize the database and create tables if they do not exist."""
     # Ensure database directory exists
@@ -114,10 +147,14 @@ async def init_db():
             """CREATE TABLE IF NOT EXISTS files
                              (id TEXT PRIMARY KEY, filename TEXT, path TEXT, download_code TEXT, upload_time DATETIME)"""
         )
+        await db.execute("""CREATE TABLE IF NOT EXISTS ip_usage
+                             (ip TEXT, uses INTEGER, last_access DATETIME)""")
+        # Older databases may hold duplicate rows per IP; collapse them before enforcing
+        # uniqueness, which the atomic quota reservation in reserve_upload_slot relies on.
         await db.execute(
-            """CREATE TABLE IF NOT EXISTS ip_usage
-                             (ip TEXT, uses INTEGER, last_access DATETIME)"""
+            "DELETE FROM ip_usage WHERE rowid NOT IN (SELECT MAX(rowid) FROM ip_usage GROUP BY ip)"
         )
+        await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_ip_usage_ip ON ip_usage (ip)")
         await db.commit()
 
 
@@ -248,12 +285,18 @@ def hash_ip(ip):
 
 
 def get_client_ip(request):
-    """Retrieve and hash the client's IP address."""
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        ip = forwarded_for.split(",")[0].strip()
-    else:
-        ip = request.remote
+    """Determine the client's IP address and return it hashed.
+
+    X-Forwarded-For is only honoured for TRUSTED_PROXY_COUNT proxies. Each proxy appends
+    the address it received the request from, so the real client is that many entries
+    from the right; anything further left was supplied by the client and cannot be trusted.
+    """
+    ip = request.remote or ""
+    if TRUSTED_PROXY_COUNT > 0:
+        forwarded_for = request.headers.get("X-Forwarded-For", "")
+        hops = [hop.strip() for hop in forwarded_for.split(",") if hop.strip()]
+        if hops:
+            ip = hops[-TRUSTED_PROXY_COUNT] if len(hops) >= TRUSTED_PROXY_COUNT else hops[0]
     return hash_ip(ip)
 
 
@@ -272,6 +315,34 @@ async def ip_reached_quota(ip):
             elif int(uses) >= MAX_USES_QUOTA:
                 return True
     return False
+
+
+async def reserve_upload_slot(ip):
+    """Atomically consume one upload from the IP's quota.
+
+    Returns False when the quota is exhausted. Doing the check and the increment in a single
+    UPDATE means concurrent uploads cannot slip past the limit.
+    """
+    await ip_reached_quota(ip)  # Drops the record if the renewal window has passed
+    now = datetime.now()
+    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO ip_usage (ip, uses, last_access) VALUES (?, 0, ?)",
+            (ip, now),
+        )
+        cursor = await db.execute(
+            "UPDATE ip_usage SET uses = uses + 1, last_access = ? WHERE ip = ? AND uses < ?",
+            (now, ip, MAX_USES_QUOTA),
+        )
+        await db.commit()
+        return cursor.rowcount == 1
+
+
+async def release_upload_slot(ip):
+    """Give back a reserved upload slot after a failed upload."""
+    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
+        await db.execute("UPDATE ip_usage SET uses = MAX(uses - 1, 0) WHERE ip = ?", (ip,))
+        await db.commit()
 
 
 def generate_download_code(length=12):
@@ -304,61 +375,61 @@ async def index(request):
 
 
 async def upload_file(request):
+    # Browsers label cross-origin requests with Sec-Fetch-Site. Refusing "cross-site" stops a
+    # third-party page from silently uploading files and draining a visitor's quota.
+    if request.headers.get("Sec-Fetch-Site", "").lower() == "cross-site":
+        return web.Response(text="Cross-site uploads are not allowed.", status=403)
+
     ip = get_client_ip(request)
-    if await ip_reached_quota(ip):
+    if not await reserve_upload_slot(ip):
         return web.Response(
             text="You have exceeded the maximum number of uploads for today.",
             status=429,
         )
 
-    reader = await request.multipart()
-    field = await reader.next()
-    if field is None or field.name != "file":
-        return web.Response(text="No file field in form.", status=400)
+    file_path = None
+    completed = False
+    try:
+        reader = await request.multipart()
+        field = await reader.next()
+        if field is None or field.name != "file":
+            return web.Response(text="No file field in form.", status=400)
 
-    filename = secure_filename(field.filename)
-    if not filename:
-        return web.Response(text="Invalid file name.", status=400)
+        filename = secure_filename(field.filename or "")
+        if not filename:
+            return web.Response(text="Invalid file name.", status=400)
 
-    file_id = str(uuid.uuid4())
-    download_code = generate_download_code()
-    file_path = os.path.join(UPLOAD_DIR, f"{file_id}_{filename}")
+        file_id = str(uuid.uuid4())
+        download_code = generate_download_code()
+        file_path = os.path.join(UPLOAD_DIR, f"{file_id}_{filename}")
 
-    size = 0
-    async with aiofiles.open(file_path, "wb") as f:
-        while True:
-            chunk = await field.read_chunk()
-            if not chunk:
-                break
-            size += len(chunk)
-            if size > MAX_FILE_SIZE:
-                if await async_isfile(file_path):
-                    await aiofiles.os.remove(file_path)
-                return web.Response(text="File size exceeds the maximum limit.", status=400)
-            await f.write(chunk)
+        size = 0
+        async with aiofiles.open(file_path, "wb") as f:
+            while True:
+                chunk = await field.read_chunk()
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_FILE_SIZE:
+                    return web.Response(text="File size exceeds the maximum limit.", status=400)
+                await f.write(chunk)
 
-    upload_time = datetime.now()
-    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
-        await db.execute(
-            "INSERT INTO files (id, filename, path, download_code, upload_time) VALUES (?, ?, ?, ?, ?)",
-            (file_id, filename, file_path, download_code, upload_time),
-        )
-        async with db.execute("SELECT 1 FROM ip_usage WHERE ip=?", (ip,)) as cursor:
-            exists = await cursor.fetchone()
-        if exists:
+        upload_time = datetime.now()
+        async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
             await db.execute(
-                "UPDATE ip_usage SET uses = uses + 1, last_access = ? WHERE ip=?",
-                (upload_time, ip),
+                "INSERT INTO files (id, filename, path, download_code, upload_time) VALUES (?, ?, ?, ?, ?)",
+                (file_id, filename, file_path, download_code, upload_time),
             )
-        else:
-            await db.execute(
-                "INSERT INTO ip_usage (ip, uses, last_access) VALUES (?, 1, ?)",
-                (ip, upload_time),
-            )
-        await db.commit()
-
-    download_url = f"/download/{download_code}"
-    return web.Response(text=download_url)
+            await db.commit()
+        completed = True
+        return web.Response(text=f"/download/{download_code}")
+    finally:
+        # Any early return, client disconnect or error leaves no partial file behind and
+        # does not count against the quota.
+        if not completed:
+            if file_path is not None:
+                await remove_file_quietly(file_path)
+            await release_upload_slot(ip)
 
 
 async def landing_page_download(request):
@@ -398,11 +469,7 @@ async def landing_page_download(request):
 async def delayed_file_deletion(file_path, download_code):
     """Delay deletion of a file (and DB record update) so that the download is not interrupted."""
     await asyncio.sleep(5)
-    if await async_isfile(file_path):
-        try:
-            await aiofiles.os.remove(file_path)
-        except Exception:
-            pass  # nosec B110 - File may already be deleted, ignore errors
+    await remove_file_quietly(file_path)
     async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
         await db.execute("DELETE FROM files WHERE download_code=?", (download_code,))
         await db.commit()
@@ -410,22 +477,28 @@ async def delayed_file_deletion(file_path, download_code):
 
 async def download_file(request):
     download_code = request.match_info["download_code"]
-    if not validate_download_code(download_code):
-        return aiohttp_jinja2.render_template("file_not_found.html", request, {}, app_key=APP_KEY)
-    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
-        async with db.execute(
-            "SELECT filename, path FROM files WHERE download_code=?", (download_code,)
-        ) as cursor:
-            row = await cursor.fetchone()
+    row = None
+    if validate_download_code(download_code):
+        async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
+            async with db.execute(
+                "SELECT filename, path FROM files WHERE download_code=?", (download_code,)
+            ) as cursor:
+                row = await cursor.fetchone()
     if row:
         filename, file_path = row
         if await async_isfile(file_path):
             response = web.FileResponse(file_path)
+            # Serve every upload as an opaque attachment so a browser never renders it
+            # (e.g. an uploaded HTML or SVG file) in the site's origin.
+            response.headers["Content-Type"] = "application/octet-stream"
             response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+            response.headers["Cache-Control"] = "no-store"
             # Schedule the deletion task so it runs in the background
-            asyncio.create_task(delayed_file_deletion(file_path, download_code))
+            spawn_background_task(delayed_file_deletion(file_path, download_code))
             return response
-    return aiohttp_jinja2.render_template("file_not_found.html", request, {}, app_key=APP_KEY)
+    response = aiohttp_jinja2.render_template("file_not_found.html", request, {}, app_key=APP_KEY)
+    response.set_status(404)
+    return response
 
 
 async def handle_404(request):
@@ -453,24 +526,15 @@ async def check_limit(request):
             ) - current_time
     quota_renewal_hours = int(next_quota_renewal.total_seconds() // 3600)
     quota_renewal_minutes = int((next_quota_renewal.total_seconds() % 3600) // 60)
-    if await ip_reached_quota(ip):
-        return web.json_response(
-            {
-                "limit_reached": True,
-                "quota_left": quota_left,
-                "quota_renewal_hours": quota_renewal_hours,
-                "quota_renewal_minutes": quota_renewal_minutes,
-            }
-        )
-    else:
-        return web.json_response(
-            {
-                "limit_reached": False,
-                "quota_left": quota_left,
-                "quota_renewal_hours": quota_renewal_hours,
-                "quota_renewal_minutes": quota_renewal_minutes,
-            }
-        )
+    return web.json_response(
+        {
+            "limit_reached": await ip_reached_quota(ip),
+            "quota_left": max(quota_left, 0),
+            "quota_renewal_hours": quota_renewal_hours,
+            "quota_renewal_minutes": quota_renewal_minutes,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 async def time_left(request):
@@ -515,11 +579,7 @@ async def purge_expired():
         ) as cursor:
             old_files = await cursor.fetchall()
         for file_id, file_path in old_files:
-            if await async_isfile(file_path):
-                try:
-                    await aiofiles.os.remove(file_path)
-                except Exception:
-                    pass  # nosec B110 - File may already be deleted, ignore errors
+            await remove_file_quietly(file_path)
             await db.execute("DELETE FROM files WHERE id=?", (file_id,))
         cutoff_time = datetime.now() - timedelta(minutes=QUOTA_RENEWAL_MINUTES)
         await db.execute("DELETE FROM ip_usage WHERE last_access < ?", (cutoff_time,))
@@ -535,15 +595,22 @@ async def check_database_file_consistency():
             if not await async_isfile(file_path):
                 await db.execute("DELETE FROM files WHERE id=?", (file_id,))
         upload_files = await async_listdir(UPLOAD_DIR)
+        now = time.time()
         for filename in upload_files:
             file_path = os.path.join(UPLOAD_DIR, filename)
             async with db.execute("SELECT id FROM files WHERE path=?", (file_path,)) as cursor:
                 exists = await cursor.fetchone()
-            if not exists:
-                try:
-                    await aiofiles.os.remove(file_path)
-                except Exception:
-                    pass  # nosec B110 - File may already be deleted, ignore errors
+            if exists:
+                continue
+            # Uploads are registered in the database only once fully written, so a recent
+            # unregistered file is most likely still being uploaded. Leave it alone.
+            try:
+                mtime = await asyncio.to_thread(os.path.getmtime, file_path)
+            except OSError:
+                continue
+            if now - mtime < ORPHAN_FILE_GRACE_SECONDS:
+                continue
+            await remove_file_quietly(file_path)
         await db.commit()
 
 
@@ -564,7 +631,11 @@ async def security_headers_middleware(request, handler):
         "script-src 'self' 'nonce-{nonce}' {analytics_script_csp}; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; "
         "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
-        "img-src 'self' data:;"
+        "img-src 'self' data:; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'self';"
     ).format(analytics_script_csp=ANALYTICS_SCRIPT_CSP, nonce=nonce)
     response.headers["Content-Security-Policy"] = csp
 
@@ -623,7 +694,7 @@ async def create_app(
 
     aiohttp_jinja2.setup(
         app,
-        loader=jinja2.FileSystemLoader("./templates"),
+        loader=jinja2.FileSystemLoader(os.path.join(APP_DIR, "templates")),
         app_key=APP_KEY,
         context_processors=[version_context_processor],
     )
@@ -634,7 +705,7 @@ async def create_app(
     app.router.add_get("/download/{download_code}", download_file)
     app.router.add_get("/check-limit", check_limit)
     app.router.add_get("/time-left/{download_code}", time_left)
-    app.router.add_static("/static", "./static")
+    app.router.add_static("/static", os.path.join(APP_DIR, "static"))
     app.router.add_get("/{tail:.*}", handle_404)
 
     # Run initial cleanup tasks
@@ -651,12 +722,21 @@ async def create_app(
     )
     scheduler.start()
 
+    async def shutdown_scheduler(app):
+        scheduler.shutdown(wait=False)
+
+    app.on_cleanup.append(shutdown_scheduler)
+
     return app
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+    # Containerized app: binding to all interfaces is intended.
     web.run_app(
         create_app(),
-        host="0.0.0.0",  # nosec B104 - Containerized app, binding to all interfaces is safe
+        host="0.0.0.0",  # nosec B104
         port=8080,
     )
