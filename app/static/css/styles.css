@@ -231,6 +231,56 @@
     margin-top: 20px;
   }
 
+  /* Command line helper */
+  details.cli-help {
+    max-width: 500px;
+    margin: 20px auto 0;
+    padding: 0 10px;
+    font-size: 1em;
+    color: var(--text-color);
+    text-align: center;
+  }
+
+  details.cli-help summary {
+    cursor: pointer;
+    color: var(--secondary-color);
+    font-weight: bold;
+  }
+
+  details.cli-help summary:hover {
+    text-decoration: underline;
+  }
+
+  details.cli-help p {
+    font-size: 0.9em;
+    margin: 12px 0;
+  }
+
+  details.cli-help pre {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0;
+    padding: 10px 12px;
+    background-color: var(--header-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    text-align: left;
+    overflow-x: auto;
+  }
+
+  details.cli-help code {
+    font-family: 'Roboto Mono', 'Courier New', monospace;
+    font-size: 0.9em;
+    white-space: pre;
+  }
+
+  details.cli-help .success-button {
+    flex-shrink: 0;
+    margin-left: 0;
+  }
+
   /* Success & Status Messages */
   .success-link-back,
   .success-link {

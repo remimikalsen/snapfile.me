@@ -35,6 +35,9 @@ services:
       - ANALYTICS_SCRIPT=
       - ANALYTICS_SCRIPT_CSP=
       - HTTPS_ONLY=false
+      # Absolute URL clients use to reach Snapfile, e.g. https://snapfile.me. Used for the
+      # links returned to command line uploads; derived from the request when empty.
+      - PUBLIC_BASE_URL=
     volumes:
       - snapfile-uploads:/app/uploads
       - snapfile-database:/app/database

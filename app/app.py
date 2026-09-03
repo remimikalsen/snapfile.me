@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 from aiohttp import web
 from aiohttp.abc import AbstractAccessLogger
+from yarl import URL
 import aiohttp_jinja2
 import jinja2
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -66,6 +67,12 @@ ALLOWED_ANALYTICS_DOMAINS = os.getenv(
     "ALLOWED_ANALYTICS_DOMAINS",
     "plausible.remim.com,plausible.io,www.googletagmanager.com,www.google-analytics.com",
 ).split(",")
+
+# Absolute base URL (e.g. https://snapfile.me) used for links returned to command line
+# clients. When empty it is derived from the request (Host / X-Forwarded-* headers).
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+# Chunk size used when streaming an upload body to disk.
+UPLOAD_CHUNK_SIZE = 64 * 1024
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/app/uploads")
 DATABASE_DIR = os.getenv("DATABASE_DIR", "/app/database")
@@ -309,6 +316,36 @@ def get_client_ip(request):
     return hash_ip(resolve_client_ip(request))
 
 
+_HOST_RE = re.compile(r"^[A-Za-z0-9.\-]+(:[0-9]{1,5})?$|^\[[0-9A-Fa-f:.]+\](:[0-9]{1,5})?$")
+
+
+def public_base_url(request):
+    """Return the absolute base URL clients should use to reach this instance.
+
+    PUBLIC_BASE_URL wins when configured. Otherwise the URL is rebuilt from the request,
+    honouring X-Forwarded-Proto / X-Forwarded-Host only when a trusted proxy is configured.
+    Returns an empty string if no sane host can be determined, so callers fall back to
+    a relative path.
+    """
+    if PUBLIC_BASE_URL:
+        return PUBLIC_BASE_URL
+    scheme = "https" if request.secure else "http"
+    host = request.host or ""
+    if TRUSTED_PROXY_COUNT > 0:
+        forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
+        forwarded_proto = forwarded_proto.split(",")[0].strip().lower()
+        if forwarded_proto in ("http", "https"):
+            scheme = forwarded_proto
+        forwarded_host = request.headers.get("X-Forwarded-Host", "").split(",")[0].strip()
+        if forwarded_host:
+            host = forwarded_host
+    if HTTPS_ONLY:
+        scheme = "https"
+    if not _HOST_RE.match(host):
+        return ""
+    return str(URL.build(scheme=scheme, authority=host))
+
+
 class ClientIPAccessLogger(AbstractAccessLogger):
     """aiohttp access logger that reports the resolved client IP.
 
@@ -407,34 +444,47 @@ async def index(request):
         "max_file_size": int(MAX_FILE_SIZE / 1024 / 1024),
         "file_expiry_hours": file_expiry_hours,
         "file_expiry_minutes": file_expiry_minutes,
+        "base_url": public_base_url(request) or str(request.url.origin()),
     }
     return aiohttp_jinja2.render_template("index.html", request, context, app_key=APP_KEY)
 
 
-async def upload_file(request):
+class UploadError(Exception):
+    """An upload was rejected; carries the HTTP status and message for the client."""
+
+    def __init__(self, status, message):
+        super().__init__(message)
+        self.status = status
+        self.message = message
+
+
+def is_cross_site(request):
     # Browsers label cross-origin requests with Sec-Fetch-Site. Refusing "cross-site" stops a
     # third-party page from silently uploading files and draining a visitor's quota.
-    if request.headers.get("Sec-Fetch-Site", "").lower() == "cross-site":
-        return web.Response(text="Cross-site uploads are not allowed.", status=403)
+    return request.headers.get("Sec-Fetch-Site", "").lower() == "cross-site"
 
+
+async def store_upload(request, open_source):
+    """Reserve a quota slot, stream an upload to disk and register it in the database.
+
+    ``open_source`` is awaited once the slot is reserved and must return
+    ``(filename, read_chunk)`` where ``read_chunk()`` is a coroutine yielding the next
+    chunk of bytes, or an empty value at end of stream.
+
+    Returns the download code. Raises UploadError when the upload is rejected; any
+    failure leaves no partial file behind and does not count against the quota.
+    """
     ip = get_client_ip(request)
     if not await reserve_upload_slot(ip):
-        return web.Response(
-            text="You have exceeded the maximum number of uploads for today.",
-            status=429,
-        )
+        raise UploadError(429, "You have exceeded the maximum number of uploads for today.")
 
     file_path = None
     completed = False
     try:
-        reader = await request.multipart()
-        field = await reader.next()
-        if field is None or field.name != "file":
-            return web.Response(text="No file field in form.", status=400)
-
-        filename = secure_filename(field.filename or "")
+        filename, read_chunk = await open_source()
+        filename = secure_filename(filename or "")
         if not filename:
-            return web.Response(text="Invalid file name.", status=400)
+            raise UploadError(400, "Invalid file name.")
 
         file_id = str(uuid.uuid4())
         download_code = generate_download_code()
@@ -443,12 +493,12 @@ async def upload_file(request):
         size = 0
         async with aiofiles.open(file_path, "wb") as f:
             while True:
-                chunk = await field.read_chunk()
+                chunk = await read_chunk()
                 if not chunk:
                     break
                 size += len(chunk)
                 if size > MAX_FILE_SIZE:
-                    return web.Response(text="File size exceeds the maximum limit.", status=400)
+                    raise UploadError(400, "File size exceeds the maximum limit.")
                 await f.write(chunk)
 
         upload_time = datetime.now()
@@ -459,14 +509,89 @@ async def upload_file(request):
             )
             await db.commit()
         completed = True
-        return web.Response(text=f"/download/{download_code}")
+        return download_code
     finally:
-        # Any early return, client disconnect or error leaves no partial file behind and
+        # Any early exit, client disconnect or error leaves no partial file behind and
         # does not count against the quota.
         if not completed:
             if file_path is not None:
                 await remove_file_quietly(file_path)
             await release_upload_slot(ip)
+
+
+async def upload_file(request):
+    """Multipart upload used by the web front page. Responds with the download path."""
+    if is_cross_site(request):
+        return web.Response(text="Cross-site uploads are not allowed.", status=403)
+
+    async def open_multipart():
+        reader = await request.multipart()
+        field = await reader.next()
+        if field is None or field.name != "file":
+            raise UploadError(400, "No file field in form.")
+        return field.filename, field.read_chunk
+
+    try:
+        download_code = await store_upload(request, open_multipart)
+    except UploadError as exc:
+        return web.Response(text=exc.message, status=exc.status)
+    return web.Response(text=f"/download/{download_code}")
+
+
+def content_length_exceeds_limit(request):
+    content_length = request.headers.get("Content-Length", "")
+    return content_length.isdigit() and int(content_length) > MAX_FILE_SIZE
+
+
+async def cli_upload_expect_handler(request):
+    """Handle ``Expect: 100-continue`` for command line uploads.
+
+    curl sends this header before large bodies. Rejecting an oversized upload here means
+    the client never has to send the body at all.
+    """
+    expect = request.headers.get("Expect", "").lower()
+    if expect != "100-continue":
+        raise web.HTTPExpectationFailed(text=f"Unknown Expect: {expect}")
+    if content_length_exceeds_limit(request):
+        return web.Response(text="File size exceeds the maximum limit.\n", status=413)
+    await request.writer.write(b"HTTP/1.1 100 Continue\r\n\r\n")
+    request.writer.output_size = 0
+    return None
+
+
+async def cli_upload(request):
+    """Raw-body upload for curl, wget and friends: ``curl -T file https://host/``.
+
+    The request body is stored as-is under the file name taken from the URL path. The
+    response is plain text: the absolute single-use download link on the first line, so
+    it can be piped straight into other tools, and the remaining quota on the second.
+    """
+    if is_cross_site(request):
+        return web.Response(text="Cross-site uploads are not allowed.\n", status=403)
+    if content_length_exceeds_limit(request):
+        return web.Response(text="File size exceeds the maximum limit.\n", status=413)
+
+    async def open_body():
+        filename = request.match_info.get("filename", "")
+        return filename or "file", lambda: request.content.read(UPLOAD_CHUNK_SIZE)
+
+    try:
+        download_code = await store_upload(request, open_body)
+    except UploadError as exc:
+        return web.Response(text=f"{exc.message}\n", status=exc.status)
+
+    base_url = public_base_url(request)
+    download_url = f"{base_url}/download/{download_code}"
+    landing_url = f"{base_url}/landing/download/{download_code}"
+    quota = await quota_status(get_client_ip(request))
+    quota_line = (
+        f"You have {quota['quota_left']} uploads left. Quota resets in "
+        f"{quota['quota_renewal_hours']} hours, {quota['quota_renewal_minutes']} minutes."
+    )
+    return web.Response(
+        text=f"{download_url}\n{quota_line}\n",
+        headers={"X-Landing-Url": landing_url, "Cache-Control": "no-store"},
+    )
 
 
 async def landing_page_download(request):
@@ -543,8 +668,8 @@ async def handle_404(request):
     return response
 
 
-async def check_limit(request):
-    ip = get_client_ip(request)
+async def quota_status(ip):
+    """Return the remaining uploads and time until renewal for a (hashed) IP."""
     await ip_reached_quota(ip)  # Clean up expired records if needed
     quota_left = MAX_USES_QUOTA
     current_time = datetime.now()
@@ -562,15 +687,17 @@ async def check_limit(request):
             ) - current_time
     quota_renewal_hours = int(next_quota_renewal.total_seconds() // 3600)
     quota_renewal_minutes = int((next_quota_renewal.total_seconds() % 3600) // 60)
-    return web.json_response(
-        {
-            "limit_reached": await ip_reached_quota(ip),
-            "quota_left": max(quota_left, 0),
-            "quota_renewal_hours": quota_renewal_hours,
-            "quota_renewal_minutes": quota_renewal_minutes,
-        },
-        headers={"Cache-Control": "no-store"},
-    )
+    return {
+        "limit_reached": await ip_reached_quota(ip),
+        "quota_left": max(quota_left, 0),
+        "quota_renewal_hours": quota_renewal_hours,
+        "quota_renewal_minutes": quota_renewal_minutes,
+    }
+
+
+async def check_limit(request):
+    status = await quota_status(get_client_ip(request))
+    return web.json_response(status, headers={"Cache-Control": "no-store"})
 
 
 async def time_left(request):
@@ -737,6 +864,11 @@ async def create_app(
 
     app.router.add_get("/", index)
     app.router.add_post("/upload", upload_file)
+    # Command line uploads: PUT the raw file body to / or /<filename>.
+    app.router.add_put("/", cli_upload, expect_handler=cli_upload_expect_handler)
+    app.router.add_put(
+        "/{filename}", cli_upload, expect_handler=cli_upload_expect_handler
+    )
     app.router.add_get("/landing/download/{download_code}", landing_page_download)
     app.router.add_get("/download/{download_code}", download_file)
     app.router.add_get("/check-limit", check_limit)
