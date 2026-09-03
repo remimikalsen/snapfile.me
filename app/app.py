@@ -53,6 +53,9 @@ CONSISTENCY_CHECK_INTERVAL_MINUTES = int(os.getenv("CONSISTENCY_CHECK_INTERVAL_M
 TRUSTED_PROXY_COUNT = int(os.getenv("TRUSTED_PROXY_COUNT", 1))
 INTERNAL_IP = os.getenv("INTERNAL_IP", "")
 INTERNAL_PORT = os.getenv("INTERNAL_PORT", "")
+# Plain HTTP by design: this address is used by clients on the same LAN as the
+# server, where TLS is not available. Built once from config, never from request data.
+INTERNAL_BASE_URL = f"http://{INTERNAL_IP}:{INTERNAL_PORT}"
 ANALYTICS_SCRIPT_RAW = os.getenv("ANALYTICS_SCRIPT", "")
 ANALYTICS_SCRIPT_CSP = os.getenv("ANALYTICS_SCRIPT_CSP", "")
 
@@ -453,8 +456,7 @@ async def landing_page_download(request):
                 "filename": filename,
                 "download_link": download_link,
                 "download_code": download_code,
-                "internal_ip": INTERNAL_IP,
-                "internal_port": INTERNAL_PORT,
+                "internal_base_url": INTERNAL_BASE_URL,
             }
             return aiohttp_jinja2.render_template(
                 "download.html", request, context, app_key=APP_KEY
