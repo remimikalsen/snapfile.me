@@ -185,6 +185,34 @@ def test_x_forwarded_for_only_trusts_configured_proxy_hops(monkeypatch):
     )
 
 
+def test_access_log_reports_resolved_client_ip(monkeypatch, caplog):
+    import logging
+
+    from aiohttp import web
+
+    logger = logging.getLogger("test.access")
+    access_logger = snapfile.ClientIPAccessLogger(logger, "")
+    # Two proxies: the outer one saw the client, the inner one saw the outer proxy.
+    monkeypatch.setattr(snapfile, "TRUSTED_PROXY_COUNT", 2)
+    request = make_mocked_request(
+        "GET",
+        "/check-limit",
+        headers={"X-Forwarded-For": "203.0.113.7, 10.0.0.2", "User-Agent": "UA/1"},
+    )
+    response = web.Response(status=200, text="ok")
+
+    with caplog.at_level(logging.INFO, logger="test.access"):
+        access_logger.log(request, response, 0.01)
+
+    assert len(caplog.records) == 1
+    line = caplog.records[0].getMessage()
+    assert line.startswith("203.0.113.7 [")
+    assert '"GET /check-limit HTTP/1.1" 200' in line
+    assert line.endswith('"-" "UA/1"')
+    # Neither the inner proxy's hop nor anything else from the chain leaks in.
+    assert "10.0.0.2" not in line
+
+
 def test_ip_usage_duplicates_are_collapsed_on_init(tmp_path, monkeypatch):
     import sqlite3
 

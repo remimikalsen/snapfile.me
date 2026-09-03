@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
 from aiohttp import web
+from aiohttp.abc import AbstractAccessLogger
 import aiohttp_jinja2
 import jinja2
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -287,8 +288,8 @@ def hash_ip(ip):
     return hashlib.sha256(ip.encode()).hexdigest()
 
 
-def get_client_ip(request):
-    """Determine the client's IP address and return it hashed.
+def resolve_client_ip(request):
+    """Determine the client's real IP address.
 
     X-Forwarded-For is only honoured for TRUSTED_PROXY_COUNT proxies. Each proxy appends
     the address it received the request from, so the real client is that many entries
@@ -300,7 +301,40 @@ def get_client_ip(request):
         hops = [hop.strip() for hop in forwarded_for.split(",") if hop.strip()]
         if hops:
             ip = hops[-TRUSTED_PROXY_COUNT] if len(hops) >= TRUSTED_PROXY_COUNT else hops[0]
-    return hash_ip(ip)
+    return ip
+
+
+def get_client_ip(request):
+    """Return the client's real IP address, hashed for quota accounting."""
+    return hash_ip(resolve_client_ip(request))
+
+
+class ClientIPAccessLogger(AbstractAccessLogger):
+    """aiohttp access logger that reports the resolved client IP.
+
+    The default logger prints the socket peer, which behind a reverse proxy is always
+    the proxy itself. This mirrors the default log line but uses the same
+    TRUSTED_PROXY_COUNT-aware resolution as the upload quota.
+    """
+
+    def log(self, request, response, elapsed):
+        try:
+            started = datetime.now().astimezone() - timedelta(seconds=elapsed)
+            self.logger.info(
+                '%s [%s] "%s %s HTTP/%s.%s" %s %s "%s" "%s"',
+                resolve_client_ip(request) or "-",
+                started.strftime("%d/%b/%Y:%H:%M:%S %z"),
+                request.method,
+                request.path_qs,
+                request.version.major,
+                request.version.minor,
+                response.status,
+                response.body_length,
+                request.headers.get("Referer", "-"),
+                request.headers.get("User-Agent", "-"),
+            )
+        except Exception:
+            self.logger.exception("Error in logging")
 
 
 async def ip_reached_quota(ip):
@@ -741,4 +775,5 @@ if __name__ == "__main__":
         create_app(),
         host="0.0.0.0",  # nosec B104
         port=8080,
+        access_log_class=ClientIPAccessLogger,
     )
