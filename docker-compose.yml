@@ -9,6 +9,15 @@ services:
       dockerfile: Dockerfile.snapfile
     ports:
       - "8080:8080"
+    # Container hardening: no privilege escalation, no Linux capabilities, read-only
+    # root filesystem (only the two data volumes are writable).
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
     environment:
       - TZ=${DOCKER_TZ}
       - MAX_FILE_SIZE=524288000  # 500 MB in bytes = 500 * 1024 * 1024
@@ -19,6 +28,10 @@ services:
       - CONSISTENCY_CHECK_INTERVAL_MINUTES=1440  # 24 hours
       - INTERNAL_IP=127.0.0.1
       - INTERNAL_PORT=8080
+      # Number of reverse proxies that append to X-Forwarded-For (1 = one proxy such as
+      # Nginx/Traefik). Set to 0 if clients reach Snapfile directly, otherwise the quota
+      # can be bypassed with a forged header.
+      - TRUSTED_PROXY_COUNT=1
       - ANALYTICS_SCRIPT=
       - ANALYTICS_SCRIPT_CSP=
       - HTTPS_ONLY=false

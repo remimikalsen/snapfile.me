@@ -4,7 +4,7 @@
 
 {% block content %}
   <h2>Download your file</h2>
-  <div id="download-area">
+  <div id="download-area" data-download-code="{{ download_code }}" data-download-link="{{ download_link }}">
     <h3>{{ filename }}</h3>
     <button id="download-button">Download now</button>
     <p id="time-left"></p>
@@ -20,8 +20,14 @@
 
 {% block extra_scripts %}
   <script nonce="{{ CSP_NONCE }}">
+    // Server-provided values are read from data attributes (HTML-escaped by the template
+    // engine) rather than interpolated into JavaScript source.
+    const downloadArea = document.getElementById('download-area');
+    const downloadCode = downloadArea.dataset.downloadCode;
+    const downloadLink = downloadArea.dataset.downloadLink;
+
     async function fetchTimeLeft() {
-      const response = await fetch(`/time-left/{{ download_code }}`);
+      const response = await fetch('/time-left/' + encodeURIComponent(downloadCode));
       if (response.ok) {
         const data = await response.json();
         if (data.hours_left !== undefined && data.minutes_left !== undefined) {
@@ -47,7 +53,7 @@
       document.getElementById('download-area').style.display = 'none';
       document.getElementById('download-notification').style.display = 'block';
       document.getElementById('download-notification').innerText = 'File download was initiated. Please check your downloads folder.';
-      window.location.href = '{{ download_link }}';
+      window.location.href = downloadLink;
     });
   </script>
 {% endblock %}

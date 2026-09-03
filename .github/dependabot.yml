@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Wait a few days before adopting a new release so obviously bad releases get pulled first.
+    cooldown:
+      default-days: 5
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Wait a few days before adopting a new release so obviously bad releases get pulled first.
+    cooldown:
+      default-days: 5
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Wait a few days before adopting a new release so obviously bad releases get pulled first.
+    cooldown:
+      default-days: 5

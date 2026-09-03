@@ -1,0 +1,14 @@
+# Keep the Docker build context minimal: only app/, requirements.txt and VERSION are copied.
+.git
+.github
+venv
+.venv
+tests
+tests-docker
+htmlcov
+**/__pycache__
+**/*.pyc
+*.md
+docker-compose.yml
+.pre-commit-config.yaml
+pip-audit-report.json

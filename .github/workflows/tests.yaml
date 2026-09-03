@@ -13,23 +13,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.13'
+          python-version: '3.14'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements.txt
+          pip install -r requirements.txt -r requirements-dev.txt
           pip install -r tests/requirements-tests.txt
 
       - name: Run pip-audit before tests
         run: |
           echo "Running pip-audit to check for vulnerabilities..."
-          pip install pip-audit
           pip-audit --requirement requirements.txt --format json --output pip-audit-results.json || \
             (echo "::error::pip-audit found vulnerabilities in Python dependencies." && \
              echo "Please review and fix vulnerabilities before proceeding." && \
@@ -102,7 +101,7 @@ jobs:
           fi
 
       - name: Upload coverage reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-report-${{ github.event.pull_request.number }}
           path: |
