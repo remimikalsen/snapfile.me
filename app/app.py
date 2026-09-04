@@ -12,7 +12,7 @@ import re
 import time
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
-from html import escape as html_escape
+import xml.etree.ElementTree as ET
 
 from aiohttp import web
 from aiohttp.abc import AbstractAccessLogger
@@ -971,12 +971,12 @@ async def robots_txt(request):
 async def sitemap_xml(request):
     base_url = public_base_url(request) or str(request.url.origin())
     pages = ["/", "/privacy", "/cookies"]
-    entries = "".join(f"  <url><loc>{html_escape(base_url + page)}</loc></url>\n" for page in pages)
-    body = (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-        f"{entries}</urlset>\n"
-    )
+    urlset = ET.Element("urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9")
+    for page in pages:
+        url = ET.SubElement(urlset, "url")
+        ET.SubElement(url, "loc").text = base_url + page
+    ET.indent(urlset)
+    body = ET.tostring(urlset, encoding="unicode", xml_declaration=True) + "\n"
     return web.Response(text=body, content_type="application/xml")
 
 
