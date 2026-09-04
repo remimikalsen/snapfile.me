@@ -12,7 +12,7 @@ import re
 import time
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosec B405 - used only to build the sitemap, never to parse XML
 
 from aiohttp import web
 from aiohttp.abc import AbstractAccessLogger
