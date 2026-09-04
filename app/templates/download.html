@@ -1,21 +1,36 @@
 {% extends "base.html" %}
 
-{% block title %}SnapFile.me - File download{% endblock %}
+{% block title %}Snapfile — Download your file{% endblock %}
+
+{% block robots %}<meta name="robots" content="noindex, nofollow">{% endblock %}
 
 {% block content %}
-  <h2>Download your file</h2>
-  <div id="download-area" data-download-code="{{ download_code }}" data-download-link="{{ download_link }}">
-    <h3>{{ filename }}</h3>
-    <button id="download-button">Download now</button>
-    <p id="time-left"></p>
-    <span class="success-span-direct">
-      Use the <a href="{{ internal_base_url }}{{ download_link }}">direct IP download</a> if you're on the same network as the SnapFile.me server.
-    </span>
+  <section id="download-area" class="card" aria-labelledby="download-title" data-download-code="{{ download_code }}" data-download-link="{{ download_link }}">
+    <p class="eyebrow">Ready to download</p>
+    <h1 id="download-title">Download your file</h1>
+    <p class="file-row"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-file"/></svg><span>{{ filename }}</span></p>
+    <div class="actions">
+      <button type="button" id="download-button" class="btn btn-primary"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-download"/></svg>Download now</button>
+    </div>
+    <p id="time-left" role="status" aria-live="polite"></p>
+    {% if internal_base_url %}
+    <p class="direct-note">
+      On the same local network as the Snapfile server? Use the <a href="{{ internal_base_url }}{{ download_link }}">direct IP download</a> instead. It stays inside your network but is not encrypted; see the <a href="/privacy">privacy policy</a>.
+    </p>
+    {% endif %}
+  </section>
+
+  <div id="download-notification" class="result result-ok" role="status" hidden>
+    <div class="result-head">
+      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>
+      <div class="result-body">
+        <h2 class="result-title">Download started</h2>
+        <p>Check your downloads folder. The file is deleted from the server within seconds, and this link will not work again.</p>
+      </div>
+    </div>
   </div>
-  <div id="download-notification"></div>
-  <div class="to-home">
-    <span class="link-back-span">[ <a href="/" class="success-link-back">Share a file with SnapFile.me</a> ]</span>
-  </div>
+
+  <p class="link-back-span"><a href="/" class="btn btn-secondary success-link-back">Share a file with Snapfile</a></p>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -25,20 +40,25 @@
     const downloadArea = document.getElementById('download-area');
     const downloadCode = downloadArea.dataset.downloadCode;
     const downloadLink = downloadArea.dataset.downloadLink;
+    const timeLeft = document.getElementById('time-left');
 
     async function fetchTimeLeft() {
-      const response = await fetch('/time-left/' + encodeURIComponent(downloadCode));
-      if (response.ok) {
-        const data = await response.json();
-        if (data.hours_left !== undefined && data.minutes_left !== undefined) {
-          document.getElementById('time-left').innerText = `Time left to download: ${data.hours_left} hours and ${data.minutes_left} minutes. Once downloaded, the file is immediately deleted.`;
+      try {
+        const response = await fetch('/time-left/' + encodeURIComponent(downloadCode));
+        if (response.ok) {
+          const data = await response.json();
+          if (data.hours_left !== undefined && data.minutes_left !== undefined) {
+            timeLeft.textContent = `Time left to download: ${data.hours_left} h ${data.minutes_left} min. Once downloaded, the file is deleted immediately.`;
+          } else {
+            timeLeft.textContent = data.message;
+          }
+        } else if (response.status === 404) {
+          timeLeft.textContent = 'The file has expired or never existed.';
         } else {
-          document.getElementById('time-left').innerText = data.message;
+          timeLeft.textContent = 'Could not fetch the time left.';
         }
-      } else if (response.status === 404) {
-        document.getElementById('time-left').innerText = 'The file has expired or never existed.';
-      } else {
-        document.getElementById('time-left').innerText = 'Error fetching time left.';
+      } catch (e) {
+        timeLeft.textContent = 'Could not fetch the time left.';
       }
     }
 
@@ -49,10 +69,12 @@
 
     window.onload = startTimer;
 
-    document.getElementById('download-button').addEventListener('click', function() {
-      document.getElementById('download-area').style.display = 'none';
-      document.getElementById('download-notification').style.display = 'block';
-      document.getElementById('download-notification').innerText = 'File download was initiated. Please check your downloads folder.';
+    document.getElementById('download-button').addEventListener('click', function () {
+      const notification = document.getElementById('download-notification');
+      downloadArea.hidden = true;
+      notification.hidden = false;
+      notification.querySelector('.result-title').setAttribute('tabindex', '-1');
+      notification.querySelector('.result-title').focus();
       window.location.href = downloadLink;
     });
   </script>

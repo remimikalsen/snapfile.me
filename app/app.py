@@ -1,14 +1,18 @@
 import asyncio
+import ipaddress
 import logging
+import mimetypes
 import os
+import shutil
 import uuid
 import secrets
 import string
-import hashlib
+import hmac
 import re
 import time
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
+from html import escape as html_escape
 
 from aiohttp import web
 from aiohttp.abc import AbstractAccessLogger
@@ -53,19 +57,32 @@ CONSISTENCY_CHECK_INTERVAL_MINUTES = int(os.getenv("CONSISTENCY_CHECK_INTERVAL_M
 # Number of reverse proxies in front of the app that append to X-Forwarded-For.
 # 0 disables X-Forwarded-For entirely (use when clients connect directly).
 TRUSTED_PROXY_COUNT = int(os.getenv("TRUSTED_PROXY_COUNT", 1))
+# Optional list of proxy addresses or CIDR ranges. When set, X-Forwarded-* headers are
+# honoured only for connections that come from one of these addresses, so a client that
+# reaches the app directly cannot forge its IP.
+TRUSTED_PROXY_IPS = [s.strip() for s in os.getenv("TRUSTED_PROXY_IPS", "").split(",") if s.strip()]
+# Storage protection: refuse uploads when free disk space would drop below this reserve,
+# or when the total stored bytes would exceed the budget (0 = no budget).
+MIN_FREE_DISK_BYTES = int(os.getenv("MIN_FREE_DISK_BYTES", 256 * 1024 * 1024))
+STORAGE_BUDGET_BYTES = int(os.getenv("STORAGE_BUDGET_BYTES", 0))
+# Slow-client protection: uploads in flight at once, and how long to wait for each chunk.
+MAX_CONCURRENT_UPLOADS = int(os.getenv("MAX_CONCURRENT_UPLOADS", 20))
+UPLOAD_READ_TIMEOUT_SECONDS = int(os.getenv("UPLOAD_READ_TIMEOUT_SECONDS", 60))
+# Longest stored file name; longer names are shortened, keeping the extension.
+MAX_FILENAME_LENGTH = 150
 INTERNAL_IP = os.getenv("INTERNAL_IP", "")
 INTERNAL_PORT = os.getenv("INTERNAL_PORT", "")
 # Plain HTTP by design: this address is used by clients on the same LAN as the
 # server, where TLS is not available. Built once from config, never from request data.
 INTERNAL_BASE_URL = f"http://{INTERNAL_IP}:{INTERNAL_PORT}"
 ANALYTICS_SCRIPT_RAW = os.getenv("ANALYTICS_SCRIPT", "")
-ANALYTICS_SCRIPT_CSP = os.getenv("ANALYTICS_SCRIPT_CSP", "")
+ANALYTICS_SCRIPT_CSP_RAW = os.getenv("ANALYTICS_SCRIPT_CSP", "")
 
-# Whitelist of allowed analytics script domains
-# Add trusted analytics domains here (e.g., plausible.io, googletagmanager.com, etc.)
+# Allowed analytics script domains. Only cookie-free, anonymised analytics belong here;
+# tag managers can load arbitrary further scripts and would void the privacy policy.
 ALLOWED_ANALYTICS_DOMAINS = os.getenv(
     "ALLOWED_ANALYTICS_DOMAINS",
-    "plausible.remim.com,plausible.io,www.googletagmanager.com,www.google-analytics.com",
+    "plausible.remim.com,plausible.io",
 ).split(",")
 
 # Absolute base URL (e.g. https://snapfile.me) used for links returned to command line
@@ -166,6 +183,14 @@ async def init_db():
             "DELETE FROM ip_usage WHERE rowid NOT IN (SELECT MAX(rowid) FROM ip_usage GROUP BY ip)"
         )
         await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_ip_usage_ip ON ip_usage (ip)")
+        # Stored size per file (used for the storage budget); added to older databases here.
+        async with db.execute("PRAGMA table_info(files)") as cursor:
+            columns = [row[1] for row in await cursor.fetchall()]
+        if "size" not in columns:
+            await db.execute("ALTER TABLE files ADD COLUMN size INTEGER DEFAULT 0")
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_files_download_code ON files (download_code)"
+        )
         await db.commit()
 
 
@@ -279,20 +304,128 @@ def validate_and_sanitize_analytics_script(script_html):
 ANALYTICS_SCRIPT = validate_and_sanitize_analytics_script(ANALYTICS_SCRIPT_RAW)
 
 
+_CSP_ORIGIN_RE = re.compile(r"https://[A-Za-z0-9.-]+(:[0-9]{1,5})?")
+
+
+def validate_csp_origin(value):
+    """Accept a single https origin for the CSP allowlist; anything else is dropped."""
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if _CSP_ORIGIN_RE.fullmatch(value):
+        return value
+    logger.warning("ANALYTICS_SCRIPT_CSP ignored: %r is not a single https origin", value)
+    return ""
+
+
+ANALYTICS_SCRIPT_CSP = validate_csp_origin(ANALYTICS_SCRIPT_CSP_RAW)
+
+
 # --- Context Processors for Templates ---
 
 
 async def version_context_processor(request):
     # Get nonce from request (set by middleware)
     nonce = request.get("csp_nonce", "")
-    return {"VERSION": VERSION, "ANALYTICS_SCRIPT": ANALYTICS_SCRIPT, "CSP_NONCE": nonce}
+    # Absolute URLs for social sharing cards (Open Graph requires absolute image URLs).
+    base_url = public_base_url(request)
+    return {
+        "VERSION": VERSION,
+        "ANALYTICS_SCRIPT": ANALYTICS_SCRIPT,
+        "CSP_NONCE": nonce,
+        "BASE_URL": base_url,
+        "PAGE_URL": f"{base_url}{request.path}" if base_url else "",
+    }
 
 
 # --- Utility Functions ---
 
 
+IP_HASH_SALT_PATH = os.path.join(DATABASE_DIR, "ip_hash_salt")
+_ip_hash_salt = None
+
+
+def get_ip_hash_salt():
+    """Return the per-instance secret mixed into IP hashes.
+
+    Without a secret, a SHA-256 of an IPv4 address can be reversed in minutes by hashing
+    every possible address. The secret is generated once, stored next to the database
+    with owner-only permissions, and never leaves the server. If the directory is not
+    writable the secret lives in memory only, which still protects the stored hashes.
+    """
+    global _ip_hash_salt
+    if _ip_hash_salt:
+        return _ip_hash_salt
+    try:
+        with open(IP_HASH_SALT_PATH, "r", encoding="ascii") as handle:
+            salt = handle.read().strip()
+        if len(salt) >= 32:
+            _ip_hash_salt = salt
+            return salt
+    except OSError:
+        pass
+    salt = secrets.token_hex(32)
+    try:
+        os.makedirs(DATABASE_DIR, exist_ok=True)
+        fd = os.open(IP_HASH_SALT_PATH, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="ascii") as handle:
+            handle.write(salt)
+    except FileExistsError:
+        with open(IP_HASH_SALT_PATH, "r", encoding="ascii") as handle:
+            salt = handle.read().strip() or salt
+    except OSError as exc:
+        logger.warning("IP hash salt kept in memory only (%s): %s", IP_HASH_SALT_PATH, exc)
+    _ip_hash_salt = salt
+    return salt
+
+
 def hash_ip(ip):
-    return hashlib.sha256(ip.encode()).hexdigest()
+    return hmac.new(get_ip_hash_salt().encode(), ip.encode(), "sha256").hexdigest()
+
+
+def _parse_trusted_proxy_networks():
+    networks = []
+    for entry in TRUSTED_PROXY_IPS:
+        try:
+            networks.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError:
+            logger.warning("Ignoring invalid TRUSTED_PROXY_IPS entry %r", entry)
+    return networks
+
+
+def proxy_is_trusted(request):
+    """True when X-Forwarded-* headers on this request may be believed.
+
+    With TRUSTED_PROXY_COUNT at zero nothing is trusted. When TRUSTED_PROXY_IPS is set the
+    connection must also come from one of those addresses; otherwise a client that bypasses
+    the proxy could forge headers.
+    """
+    if TRUSTED_PROXY_COUNT <= 0:
+        return False
+    if not TRUSTED_PROXY_IPS:
+        return True
+    try:
+        remote = ipaddress.ip_address(request.remote or "")
+    except ValueError:
+        return False
+    return any(remote in network for network in _parse_trusted_proxy_networks())
+
+
+def normalize_ip(ip):
+    """Quota key for an address: the address itself for IPv4, the /64 network for IPv6.
+
+    Residential IPv6 customers hold a /64, so counting per single address would give an
+    attacker 2**64 free identities.
+    """
+    try:
+        address = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    if address.version == 6:
+        if address.ipv4_mapped:
+            return str(address.ipv4_mapped)
+        return str(ipaddress.ip_network((address, 64), strict=False))
+    return str(address)
 
 
 def resolve_client_ip(request):
@@ -303,7 +436,7 @@ def resolve_client_ip(request):
     from the right; anything further left was supplied by the client and cannot be trusted.
     """
     ip = request.remote or ""
-    if TRUSTED_PROXY_COUNT > 0:
+    if proxy_is_trusted(request):
         forwarded_for = request.headers.get("X-Forwarded-For", "")
         hops = [hop.strip() for hop in forwarded_for.split(",") if hop.strip()]
         if hops:
@@ -312,8 +445,18 @@ def resolve_client_ip(request):
 
 
 def get_client_ip(request):
-    """Return the client's real IP address, hashed for quota accounting."""
-    return hash_ip(resolve_client_ip(request))
+    """Return the client's quota key: the resolved address, normalised and hashed."""
+    return hash_ip(normalize_ip(resolve_client_ip(request)))
+
+
+def truncate_filename(name, limit=MAX_FILENAME_LENGTH):
+    """Shorten an over-long file name, keeping a short extension, so the path fits on disk."""
+    if len(name) <= limit:
+        return name
+    stem, dot, ext = name.rpartition(".")
+    if dot and stem and 0 < len(ext) <= 16:
+        return stem[: max(1, limit - len(ext) - 1)] + "." + ext
+    return name[:limit]
 
 
 _HOST_RE = re.compile(r"^[A-Za-z0-9.\-]+(:[0-9]{1,5})?$|^\[[0-9A-Fa-f:.]+\](:[0-9]{1,5})?$")
@@ -331,7 +474,7 @@ def public_base_url(request):
         return PUBLIC_BASE_URL
     scheme = "https" if request.secure else "http"
     host = request.host or ""
-    if TRUSTED_PROXY_COUNT > 0:
+    if proxy_is_trusted(request):
         forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
         forwarded_proto = forwarded_proto.split(",")[0].strip().lower()
         if forwarded_proto in ("http", "https"):
@@ -346,15 +489,26 @@ def public_base_url(request):
     return str(URL.build(scheme=scheme, authority=host))
 
 
+_DOWNLOAD_CODE_IN_PATH = re.compile(r"(/(?:landing/download|download|time-left)/)[A-Za-z0-9]+")
+
+
+def redact_download_codes(text):
+    """Replace download codes in a path or URL so log lines cannot be tied to a file."""
+    return _DOWNLOAD_CODE_IN_PATH.sub(r"\1[code]", text)
+
+
 class ClientIPAccessLogger(AbstractAccessLogger):
     """aiohttp access logger that reports the resolved client IP.
 
     The default logger prints the socket peer, which behind a reverse proxy is always
     the proxy itself. This mirrors the default log line but uses the same
-    TRUSTED_PROXY_COUNT-aware resolution as the upload quota.
+    TRUSTED_PROXY_COUNT-aware resolution as the upload quota. Download codes are
+    redacted from the path and the referrer, as promised in the privacy policy.
     """
 
     def log(self, request, response, elapsed):
+        if request.path == "/healthz":
+            return  # container health probes would otherwise dominate the log
         try:
             started = datetime.now().astimezone() - timedelta(seconds=elapsed)
             self.logger.info(
@@ -362,12 +516,12 @@ class ClientIPAccessLogger(AbstractAccessLogger):
                 resolve_client_ip(request) or "-",
                 started.strftime("%d/%b/%Y:%H:%M:%S %z"),
                 request.method,
-                request.path_qs,
+                redact_download_codes(request.path_qs),
                 request.version.major,
                 request.version.minor,
                 response.status,
                 response.body_length,
-                request.headers.get("Referer", "-"),
+                redact_download_codes(request.headers.get("Referer", "-")),
                 request.headers.get("User-Agent", "-"),
             )
         except Exception:
@@ -442,6 +596,7 @@ async def index(request):
     file_expiry_minutes = FILE_EXPIRY_MINUTES % 60
     context = {
         "max_file_size": int(MAX_FILE_SIZE / 1024 / 1024),
+        "max_file_bytes": MAX_FILE_SIZE,
         "file_expiry_hours": file_expiry_hours,
         "file_expiry_minutes": file_expiry_minutes,
         "base_url": public_base_url(request) or str(request.url.origin()),
@@ -458,10 +613,62 @@ class UploadError(Exception):
         self.message = message
 
 
+def expected_hosts(request):
+    """Host names this instance answers to, for comparing against an Origin header."""
+    hosts = {(request.host or "").lower()}
+    if proxy_is_trusted(request):
+        forwarded_host = request.headers.get("X-Forwarded-Host", "").split(",")[0].strip()
+        if forwarded_host:
+            hosts.add(forwarded_host.lower())
+    if PUBLIC_BASE_URL:
+        hosts.add(urlparse(PUBLIC_BASE_URL).netloc.lower())
+    hosts.discard("")
+    return hosts
+
+
 def is_cross_site(request):
-    # Browsers label cross-origin requests with Sec-Fetch-Site. Refusing "cross-site" stops a
-    # third-party page from silently uploading files and draining a visitor's quota.
-    return request.headers.get("Sec-Fetch-Site", "").lower() == "cross-site"
+    """Reject uploads a third-party page triggers in a visitor's browser.
+
+    Browsers label cross-origin requests with Sec-Fetch-Site; older ones at least send
+    Origin. Non-browser clients such as curl send neither and are allowed through.
+    """
+    if request.headers.get("Sec-Fetch-Site", "").lower() == "cross-site":
+        return True
+    origin = request.headers.get("Origin", "").strip()
+    if not origin:
+        return False
+    if origin.lower() == "null":
+        return True
+    return urlparse(origin).netloc.lower() not in expected_hosts(request)
+
+
+def storage_has_headroom():
+    """False when accepting one more maximum-size upload would exhaust the disk reserve."""
+    try:
+        free = shutil.disk_usage(UPLOAD_DIR).free
+    except OSError:
+        return True
+    return free >= MAX_FILE_SIZE + MIN_FREE_DISK_BYTES
+
+
+async def storage_within_budget():
+    """False when the configured total storage budget would be exceeded."""
+    if STORAGE_BUDGET_BYTES <= 0:
+        return True
+    async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
+        async with db.execute("SELECT COALESCE(SUM(size), 0) FROM files") as cursor:
+            (stored,) = await cursor.fetchone()
+    return stored + MAX_FILE_SIZE <= STORAGE_BUDGET_BYTES
+
+
+_upload_semaphore = None
+
+
+def upload_semaphore():
+    global _upload_semaphore
+    if _upload_semaphore is None:
+        _upload_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
+    return _upload_semaphore
 
 
 async def store_upload(request, open_source):
@@ -474,6 +681,12 @@ async def store_upload(request, open_source):
     Returns the download code. Raises UploadError when the upload is rejected; any
     failure leaves no partial file behind and does not count against the quota.
     """
+    if not storage_has_headroom() or not await storage_within_budget():
+        raise UploadError(507, "The server is out of storage space. Please try again later.")
+    semaphore = upload_semaphore()
+    if semaphore.locked():
+        raise UploadError(503, "Too many uploads are in progress. Please try again in a moment.")
+
     ip = get_client_ip(request)
     if not await reserve_upload_slot(ip):
         raise UploadError(429, "You have exceeded the maximum number of uploads for today.")
@@ -481,35 +694,41 @@ async def store_upload(request, open_source):
     file_path = None
     completed = False
     try:
-        filename, read_chunk = await open_source()
-        filename = secure_filename(filename or "")
-        if not filename:
-            raise UploadError(400, "Invalid file name.")
+        async with semaphore:
+            filename, read_chunk = await open_source()
+            filename = truncate_filename(secure_filename(filename or ""))
+            if not filename:
+                raise UploadError(400, "Invalid file name.")
 
-        file_id = str(uuid.uuid4())
-        download_code = generate_download_code()
-        file_path = os.path.join(UPLOAD_DIR, f"{file_id}_{filename}")
+            file_id = str(uuid.uuid4())
+            download_code = generate_download_code()
+            file_path = os.path.join(UPLOAD_DIR, f"{file_id}_{filename}")
 
-        size = 0
-        async with aiofiles.open(file_path, "wb") as f:
-            while True:
-                chunk = await read_chunk()
-                if not chunk:
-                    break
-                size += len(chunk)
-                if size > MAX_FILE_SIZE:
-                    raise UploadError(400, "File size exceeds the maximum limit.")
-                await f.write(chunk)
+            size = 0
+            async with aiofiles.open(file_path, "wb") as f:
+                while True:
+                    try:
+                        async with asyncio.timeout(UPLOAD_READ_TIMEOUT_SECONDS):
+                            chunk = await read_chunk()
+                    except TimeoutError:
+                        raise UploadError(408, "The upload stalled and was cancelled.")
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > MAX_FILE_SIZE:
+                        raise UploadError(413, "File size exceeds the maximum limit.")
+                    await f.write(chunk)
 
-        upload_time = datetime.now()
-        async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
-            await db.execute(
-                "INSERT INTO files (id, filename, path, download_code, upload_time) VALUES (?, ?, ?, ?, ?)",
-                (file_id, filename, file_path, download_code, upload_time),
-            )
-            await db.commit()
-        completed = True
-        return download_code
+            upload_time = datetime.now()
+            async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
+                await db.execute(
+                    "INSERT INTO files (id, filename, path, download_code, upload_time, size)"
+                    " VALUES (?, ?, ?, ?, ?, ?)",
+                    (file_id, filename, file_path, download_code, upload_time, size),
+                )
+                await db.commit()
+            completed = True
+            return download_code
     finally:
         # Any early exit, client disconnect or error leaves no partial file behind and
         # does not count against the quota.
@@ -523,6 +742,10 @@ async def upload_file(request):
     """Multipart upload used by the web front page. Responds with the download path."""
     if is_cross_site(request):
         return web.Response(text="Cross-site uploads are not allowed.", status=403)
+    # Multipart framing adds a little overhead; anything clearly beyond the limit is
+    # refused before the body is read.
+    if content_length_exceeds_limit(request, slack=1024 * 1024):
+        return web.Response(text="File size exceeds the maximum limit.", status=413)
 
     async def open_multipart():
         reader = await request.multipart()
@@ -538,9 +761,9 @@ async def upload_file(request):
     return web.Response(text=f"/download/{download_code}")
 
 
-def content_length_exceeds_limit(request):
+def content_length_exceeds_limit(request, slack=0):
     content_length = request.headers.get("Content-Length", "")
-    return content_length.isdigit() and int(content_length) > MAX_FILE_SIZE
+    return content_length.isdigit() and int(content_length) > MAX_FILE_SIZE + slack
 
 
 async def cli_upload_expect_handler(request):
@@ -615,11 +838,14 @@ async def landing_page_download(request):
                 "filename": filename,
                 "download_link": download_link,
                 "download_code": download_code,
-                "internal_base_url": INTERNAL_BASE_URL,
+                "internal_base_url": INTERNAL_BASE_URL if INTERNAL_IP else "",
             }
-            return aiohttp_jinja2.render_template(
+            response = aiohttp_jinja2.render_template(
                 "download.html", request, context, app_key=APP_KEY
             )
+            # The page names the file; never let a shared browser serve it from cache.
+            response.headers["Cache-Control"] = "no-store"
+            return response
 
     # Key not found, so returning a 404 response
     response = aiohttp_jinja2.render_template("file_not_found.html", request, {}, app_key=APP_KEY)
@@ -627,24 +853,35 @@ async def landing_page_download(request):
     return response
 
 
-async def delayed_file_deletion(file_path, download_code):
-    """Delay deletion of a file (and DB record update) so that the download is not interrupted."""
+async def delayed_file_deletion(file_path):
+    """Remove the file a few seconds after its single download began, so the transfer
+    that is already streaming is not interrupted. The database row is gone already."""
     await asyncio.sleep(5)
     await remove_file_quietly(file_path)
+
+
+async def claim_download(download_code):
+    """Atomically consume a download code.
+
+    The row is deleted in the same statement that reads it, so of two simultaneous
+    requests exactly one receives the file and the other sees "already downloaded".
+    Returns (filename, path) or None.
+    """
     async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
-        await db.execute("DELETE FROM files WHERE download_code=?", (download_code,))
+        async with db.execute(
+            "DELETE FROM files WHERE download_code=? RETURNING filename, path",
+            (download_code,),
+        ) as cursor:
+            row = await cursor.fetchone()
         await db.commit()
+    return row
 
 
 async def download_file(request):
     download_code = request.match_info["download_code"]
     row = None
     if validate_download_code(download_code):
-        async with aiosqlite.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES) as db:
-            async with db.execute(
-                "SELECT filename, path FROM files WHERE download_code=?", (download_code,)
-            ) as cursor:
-                row = await cursor.fetchone()
+        row = await claim_download(download_code)
     if row:
         filename, file_path = row
         if await async_isfile(file_path):
@@ -654,18 +891,93 @@ async def download_file(request):
             response.headers["Content-Type"] = "application/octet-stream"
             response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
             response.headers["Cache-Control"] = "no-store"
-            # Schedule the deletion task so it runs in the background
-            spawn_background_task(delayed_file_deletion(file_path, download_code))
+            spawn_background_task(delayed_file_deletion(file_path))
             return response
     response = aiohttp_jinja2.render_template("file_not_found.html", request, {}, app_key=APP_KEY)
     response.set_status(404)
     return response
 
 
+async def healthz(request):
+    """Cheap liveness probe for the container health check; not logged."""
+    return web.Response(status=204, headers={"Cache-Control": "no-store"})
+
+
 async def handle_404(request):
     response = aiohttp_jinja2.render_template("404.html", request, {}, app_key=APP_KEY)
     response.set_status(404)
     return response
+
+
+def policy_context():
+    """Values the privacy and cookie policy pages state about this instance."""
+    return {
+        "file_expiry_hours": FILE_EXPIRY_MINUTES // 60,
+        "file_expiry_minutes": FILE_EXPIRY_MINUTES % 60,
+        "quota_renewal_minutes": QUOTA_RENEWAL_MINUTES,
+        "purge_interval_minutes": PURGE_INTERVAL_MINUTES,
+        "max_file_size": int(MAX_FILE_SIZE / 1024 / 1024),
+        "quota_window_text": humanize_minutes(QUOTA_RENEWAL_MINUTES),
+        "analytics_enabled": bool(ANALYTICS_SCRIPT),
+        "analytics_host": analytics_script_host(),
+    }
+
+
+def humanize_minutes(minutes):
+    """60 -> 'an hour', 120 -> '2 hours', 90 -> '90 minutes'."""
+    if minutes == 60:
+        return "an hour"
+    if minutes % 60 == 0:
+        return f"{minutes // 60} hours"
+    return f"{minutes} minutes"
+
+
+def analytics_script_host():
+    """Host name the analytics script is loaded from, or '' when analytics is off."""
+    match = re.search(r'src\s*=\s*["\']([^"\']+)["\']', ANALYTICS_SCRIPT, re.IGNORECASE)
+    return urlparse(match.group(1)).netloc if match else ""
+
+
+async def privacy_policy(request):
+    return aiohttp_jinja2.render_template(
+        "privacy.html", request, policy_context(), app_key=APP_KEY
+    )
+
+
+async def cookie_policy(request):
+    return aiohttp_jinja2.render_template(
+        "cookies.html", request, policy_context(), app_key=APP_KEY
+    )
+
+
+async def robots_txt(request):
+    # Landing and download URLs must never be crawled: fetching a direct
+    # download link consumes the single use and deletes the file.
+    lines = [
+        "User-agent: *",
+        "Disallow: /landing/",
+        "Disallow: /download/",
+        "Disallow: /check-limit",
+        "Disallow: /time-left/",
+        "Disallow: /healthz",
+        "Allow: /",
+    ]
+    base_url = public_base_url(request)
+    if base_url:
+        lines.append(f"Sitemap: {base_url}/sitemap.xml")
+    return web.Response(text="\n".join(lines) + "\n", content_type="text/plain")
+
+
+async def sitemap_xml(request):
+    base_url = public_base_url(request) or str(request.url.origin())
+    pages = ["/", "/privacy", "/cookies"]
+    entries = "".join(f"  <url><loc>{html_escape(base_url + page)}</loc></url>\n" for page in pages)
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{entries}</urlset>\n"
+    )
+    return web.Response(text=body, content_type="application/xml")
 
 
 async def quota_status(ip):
@@ -792,8 +1104,8 @@ async def security_headers_middleware(request, handler):
     csp = (
         "default-src 'self' {analytics_script_csp}; "
         "script-src 'self' 'nonce-{nonce}' {analytics_script_csp}; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; "
-        "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
+        "style-src 'self'; "
+        "font-src 'self'; "
         "img-src 'self' data:; "
         "object-src 'none'; "
         "base-uri 'self'; "
@@ -843,6 +1155,15 @@ async def create_app(
         pass  # May fail in test environments
 
     await init_db()
+    if not PUBLIC_BASE_URL:
+        logger.warning(
+            "PUBLIC_BASE_URL is not set; absolute links are derived from request headers."
+        )
+    if TRUSTED_PROXY_COUNT > 0 and not TRUSTED_PROXY_IPS:
+        logger.warning(
+            "X-Forwarded-For is trusted from any connection. Bind the app to the proxy only, "
+            "or set TRUSTED_PROXY_IPS."
+        )
     app = web.Application(middlewares=[security_headers_middleware])
 
     # Remove Server header using signal handler (aiohttp adds it automatically)
@@ -866,13 +1187,17 @@ async def create_app(
     app.router.add_post("/upload", upload_file)
     # Command line uploads: PUT the raw file body to / or /<filename>.
     app.router.add_put("/", cli_upload, expect_handler=cli_upload_expect_handler)
-    app.router.add_put(
-        "/{filename}", cli_upload, expect_handler=cli_upload_expect_handler
-    )
+    app.router.add_put("/{filename}", cli_upload, expect_handler=cli_upload_expect_handler)
     app.router.add_get("/landing/download/{download_code}", landing_page_download)
     app.router.add_get("/download/{download_code}", download_file)
     app.router.add_get("/check-limit", check_limit)
     app.router.add_get("/time-left/{download_code}", time_left)
+    app.router.add_get("/privacy", privacy_policy)
+    app.router.add_get("/cookies", cookie_policy)
+    app.router.add_get("/robots.txt", robots_txt)
+    app.router.add_get("/sitemap.xml", sitemap_xml)
+    app.router.add_get("/healthz", healthz)
+    mimetypes.add_type("font/woff2", ".woff2")  # self-hosted fonts
     app.router.add_static("/static", os.path.join(APP_DIR, "static"))
     app.router.add_get("/{tail:.*}", handle_404)
 

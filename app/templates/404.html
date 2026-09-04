@@ -1,11 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}404 - Page Not Found | SnapFile.me{% endblock %}
+{% block title %}Page not found — Snapfile{% endblock %}
+
+{% block robots %}<meta name="robots" content="noindex, nofollow">{% endblock %}
 
 {% block content %}
-    <h1>404 - Page Not Found</h1>
-    <p>This page is playing hide and seek... and it's winning.</p>
-    <div class="to-home">
-        <span class="link-back-span">But why not [ <a href="/" class="success-link-back">share a file</a> ] with SnapFile.me?</span>
+  <section class="card" aria-labelledby="nf-title">
+    <p class="eyebrow">Error 404</p>
+    <h1 id="nf-title">Page not found</h1>
+    <p class="card-lead">This page is playing hide and seek, and it is winning. Check the address, or start a new share.</p>
+    <div class="actions to-home">
+      <a href="/" class="btn btn-primary success-link-back">Share a file</a>
     </div>
+  </section>
 {% endblock %}

@@ -1,313 +1,464 @@
 {% extends "base.html" %}
 
-{% block title %}SnapFile.me - Secure File Sharing{% endblock %}
+{% block title %}Snapfile — Secure single-use file sharing{% endblock %}
 
 {% block extra_head %}
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <script type="application/ld+json" nonce="{{ CSP_NONCE }}">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Snapfile",
+    "url": "{{ BASE_URL }}/",
+    "image": "{{ BASE_URL }}/static/brand/social-card.png",
+    "description": "Secure single-use file sharing. Upload a file and get one link; the file is deleted within minutes of being downloaded, or when the link expires.",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Any",
+    "browserRequirements": "Requires JavaScript",
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "NOK" },
+    "sponsor": { "@type": "Organization", "name": "ArktIQ IT AS", "url": "https://arktiq.no" },
+    "license": "https://github.com/remimikalsen/snapfile.me/blob/main/LICENSE"
+  }
+  </script>
 {% endblock %}
 
 {% block content %}
-  <div id="upload-container">
-    <h2>Share a file!</h2>
-    <div id="upload-area">
-      <label for="file-input">
-        <button id="browse-button">
-          <span class="icon" role="button">📂</span> Browse Files
-        </button>
-      </label>
-      <input type="file" id="file-input" aria-label="File Upload">
-      <p>or drag and drop a file here to upload it.</p>
-    </div>
-    <p class="upload-helptext">
-      Uploading a file generates a link that can be downloaded once. <br />
-      The link will be valid for {{ file_expiry_hours }} hours, {{ file_expiry_minutes }} minutes. <br />
-      Maximum file size is {{ max_file_size }} MB
-    </p>
+  <div class="hero">
+  <div class="hero-main">
+  <div id="upload-container" class="stack">
+    <section id="upload-area" class="dropzone" data-state="idle" aria-labelledby="upload-title" data-max-bytes="{{ max_file_bytes }}">
+      <svg class="dropzone-icon" aria-hidden="true" focusable="false"><use href="#i-upload"/></svg>
+      <h1 id="upload-title" class="dropzone-title">
+        <span class="when-idle">Share a file with a single-use link</span>
+        <span class="when-drag">Drop to upload</span>
+      </h1>
+      <p class="dropzone-lead when-idle">Drag a file here, or</p>
+      <button type="button" id="browse-button" class="btn btn-primary when-idle" aria-describedby="upload-help">Choose a file</button>
+      <input type="file" id="file-input" class="sr-only" tabindex="-1" aria-label="File upload">
+      <p id="upload-help" class="upload-helptext">
+        Up to {{ max_file_size }} MB. The link works once, then the file is deleted.
+        Unused links expire after {{ file_expiry_hours }} h{% if file_expiry_minutes %} {{ file_expiry_minutes }} min{% endif %}.
+      </p>
+    </section>
+
     <details class="cli-help">
       <summary>Prefer the command line? Use curl or wget</summary>
-      <p>Upload straight from a terminal and get a single-use download link back:</p>
-      <pre><code id="cli-command">curl -T ./report.pdf {{ base_url }}/</code><button id="copy-cli-command-button" class="success-button" aria-label="Copy command to clipboard" title="Copy command"><span class="material-icons">content_copy</span></button></pre>
-      <p>
-        The link is printed on the first line, ready to paste or pipe, and your remaining quota on the second.
-        The same quota, size limit and expiry apply as for uploads from this page.
-        <a href="https://github.com/remimikalsen/snapfile.me#command-line-usage" target="_blank" rel="noopener">More examples</a>.
-      </p>
+      <div class="cli-body">
+        <p>Upload straight from a terminal and get a single-use download link back:</p>
+        <pre><code id="cli-command">curl -T ./report.pdf {{ base_url }}/</code><button type="button" id="copy-cli-command-button" class="btn btn-quiet" data-copy-target="cli-command" aria-label="Copy command to clipboard"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-copy"/></svg></button></pre>
+        <p>
+          The link is printed on the first line, ready to paste or pipe, and your remaining quota on the second.
+          The same quota, size limit and expiry apply as for uploads from this page.
+          <a href="https://github.com/remimikalsen/snapfile.me#command-line-usage">More examples</a>.
+        </p>
+      </div>
     </details>
   </div>
 
-  <div id="snapfile-status">
-    <div id="progress">Uploading...</div>
-    <div id="progress-bar">
-      <div></div>
-      <span id="progress-percentage">0%</span>
+  <div id="snapfile-status" class="status-panel" hidden>
+    <div id="progress" class="uploading" hidden>
+      <div class="status-row">
+        <p id="progress-label" class="status-title">Uploading <span id="progress-filename" class="mono"></span></p>
+        <p id="progress-percentage">0%</p>
+      </div>
+      <div id="progress-bar" role="progressbar" aria-labelledby="progress-label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div></div></div>
+      <div class="actions"><button type="button" id="cancel-upload-button" class="btn btn-secondary">Cancel upload</button></div>
     </div>
-    <div id="success-message"></div>
-    <div id="error-message"></div>
+    <div id="success-message" class="result result-ok" hidden></div>
+    <div id="error-message" class="result result-err" role="alert" hidden></div>
   </div>
+
   <p class="quota-info"></p>
+  <p id="upload-status" role="status" aria-live="polite" aria-atomic="true" class="sr-only"></p>
+  </div>
+
+  <section class="about" aria-labelledby="about-title">
+    <h2 id="about-title">How Snapfile works</h2>
+    <ol class="steps">
+      <li><b>Upload a file.</b> No account, no email address, nothing to install. Files up to {{ max_file_size }} MB.</li>
+      <li><b>Share the link.</b> You get one link to a download page. Send it by chat, email or phone; a password manager like <a href="https://credshare.app" rel="external noopener">CredShare</a> works well for the sensitive ones.</li>
+      <li><b>Downloaded once, then gone.</b> The file is deleted from the server within seconds of being downloaded, or after {{ file_expiry_hours }} hours if nobody fetches it.</li>
+    </ol>
+    <h2>Private by design</h2>
+    <p>
+      Snapfile is a free, anonymous file transfer service for sending large files, documents and archives without leaving a copy behind.
+      It is hosted in Norway and shares nothing with third parties. There are no accounts, no tracking and no cookies.
+      Read the <a href="/privacy">privacy policy</a>, or inspect the <a href="https://github.com/remimikalsen/snapfile.me" rel="external noopener">open-source code</a> and run your own instance.
+    </p>
+  </section>
+  </div>
 {% endblock %}
 
 {% block extra_scripts %}
-  <div id="link-copy-notification" style="display: none;"></div>
+  <div id="link-copy-notification" class="toast" hidden aria-hidden="true"></div>
   <script nonce="{{ CSP_NONCE }}">
     const uploadContainer = document.getElementById('upload-container');
     const uploadArea = document.getElementById('upload-area');
     const fileInput = document.getElementById('file-input');
+    const browseButton = document.getElementById('browse-button');
     const snapfileStatus = document.getElementById('snapfile-status');
     const progress = document.getElementById('progress');
-    const progressBar = document.getElementById('progress-bar').firstElementChild;
+    const progressBar = document.getElementById('progress-bar');
+    const progressFill = progressBar.firstElementChild;
+    const progressFilename = document.getElementById('progress-filename');
     const progressPercentage = document.getElementById('progress-percentage');
+    const cancelButton = document.getElementById('cancel-upload-button');
     const successMessage = document.getElementById('success-message');
     const errorMessage = document.getElementById('error-message');
-    const browseButton = document.getElementById('browse-button');
+    const uploadStatus = document.getElementById('upload-status');
     const linkCopyNotification = document.getElementById('link-copy-notification');
+    const quotaInfo = document.querySelector('.quota-info');
+    let activeUpload = null;
+    let announcedMilestones = [];
 
-    // Open file browser on button click
-    browseButton.addEventListener('click', () => {
-      fileInput.click();
+    // ---- helpers -------------------------------------------------------
+
+    function announce(message) {
+      // Clear first so identical consecutive messages are still announced.
+      uploadStatus.textContent = '';
+      setTimeout(() => { uploadStatus.textContent = message; }, 50);
+    }
+
+    function formatSize(bytes) {
+      if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+      return Math.max(1, Math.round(bytes / 1024)) + ' KB';
+    }
+
+    function svgIcon(id, className) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', className);
+      svg.setAttribute('aria-hidden', 'true');
+      svg.setAttribute('focusable', 'false');
+      const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+      use.setAttribute('href', '#' + id);
+      svg.appendChild(use);
+      return svg;
+    }
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+
+    function focusHeading(heading) {
+      heading.setAttribute('tabindex', '-1');
+      heading.focus();
+    }
+
+    // ---- choosing a file -----------------------------------------------
+
+    // One real button opens the picker; the file input stays out of the tab order.
+    browseButton.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length > 0) uploadFile(fileInput.files[0]);
     });
 
-    // Drag and drop functionality
-    uploadArea.addEventListener('dragover', (e) => {
+    // Drag and drop is an optional path with the same outcome as the button.
+    let dragDepth = 0;
+    uploadArea.addEventListener('dragenter', (e) => {
       e.preventDefault();
-      uploadArea.classList.add('dragover');
+      dragDepth++;
+      uploadArea.dataset.state = 'drag';
     });
-
+    uploadArea.addEventListener('dragover', (e) => e.preventDefault());
     uploadArea.addEventListener('dragleave', () => {
-      uploadArea.classList.remove('dragover');
+      if (--dragDepth <= 0) { dragDepth = 0; uploadArea.dataset.state = 'idle'; }
     });
-
     uploadArea.addEventListener('drop', (e) => {
       e.preventDefault();
-      uploadArea.classList.remove('dragover');
-      fileInput.files = e.dataTransfer.files;
-      uploadFile(); // Automatically start the upload
+      dragDepth = 0;
+      uploadArea.dataset.state = 'idle';
+      if (e.dataTransfer.files.length > 0) uploadFile(e.dataTransfer.files[0]);
     });
 
-    // File input change handling
-    fileInput.addEventListener('change', uploadFile);
+    // ---- uploading -----------------------------------------------------
 
-    // Copy the command line example to the clipboard
-    document.getElementById('copy-cli-command-button').addEventListener('click', () => {
-      copyToClipboard(document.getElementById('cli-command').innerText);
-    });
+    const maxBytes = Number(uploadArea.dataset.maxBytes) || 0;
 
-    function uploadFile() {
-      if (fileInput.files.length === 0) {
-        alert('Please select a file first.');
+    function uploadFile(file) {
+      // Refuse oversized files before a single byte is sent.
+      if (maxBytes && file.size > maxBytes) {
+        fileInput.value = '';
+        showError('This file is too large', formatSize(file.size) + ' exceeds the ' + formatSize(maxBytes) + ' limit. Compress it or split it into parts, then choose it again.', true);
         return;
       }
+      showProgress(file);
+      announce('Uploading ' + file.name + ', ' + formatSize(file.size) + '.');
 
-      // Show progress indicator and disable new uploads
-      showStatus('progress');
-
-      // Create FormData object and append file
       const formData = new FormData();
-      formData.append('file', fileInput.files[0]);
+      formData.append('file', file);
 
       const xhr = new XMLHttpRequest();
+      activeUpload = xhr;
       xhr.open('POST', '/upload', true);
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
-          const percentComplete = Math.round((event.loaded / event.total) * 100);
-          progressBar.style.width = percentComplete + '%';
-          progressPercentage.innerText = percentComplete + '%';
+          setProgress(Math.round((event.loaded / event.total) * 100));
         }
       };
 
       xhr.onload = () => {
-        hideStatus('progress');
+        activeUpload = null;
+        hideProgress();
         if (xhr.status === 200) {
           showSuccess(xhr.responseText);
         } else if (xhr.status === 429) {
-          showError(xhr.responseText);
+          showError(xhr.responseText, 'The quota resets automatically. Check the time shown below.', false);
+        } else if (xhr.status === 507) {
+          showError(xhr.responseText, 'The server is full. Files free up as they are downloaded or expire.', false);
+        } else if ([400, 403, 408, 413, 503].includes(xhr.status) && xhr.responseText) {
+          showError(xhr.responseText.trim(), xhr.status === 503 ? 'Wait a moment, then try again.' : 'Check the file, then try again.', true);
         } else {
-          showError('Error uploading file');
+          showError('Error uploading file', 'Check your connection and file size, then try again.', true);
         }
       };
 
       xhr.onerror = () => {
-        hideStatus('progress');
-        showError('Error uploading file');
+        activeUpload = null;
+        hideProgress();
+        showError('Error uploading file', 'Check your connection, then try again.', true);
+      };
+
+      xhr.onabort = () => {
+        activeUpload = null;
+        hideProgress();
+        snapfileStatus.hidden = true;
+        uploadContainer.hidden = false;
+        fileInput.value = '';
+        announce('Upload cancelled. No file was stored.');
+        browseButton.focus();
       };
 
       xhr.send(formData);
     }
 
-    function showStatus(status) {
-      snapfileStatus.style.display = 'block';
-      uploadContainer.style.display = 'none';
-      if (status === 'progress') {
-        progress.style.display = 'block';
-        progressBar.parentElement.style.display = 'block';
+    function setProgress(percent) {
+      progressFill.style.width = percent + '%';
+      progressPercentage.textContent = percent + '%';
+      progressBar.setAttribute('aria-valuenow', percent);
+      // Announce a few milestones only, so a fast upload does not flood the screen reader.
+      if ([25, 50, 75].includes(percent) && !announcedMilestones.includes(percent)) {
+        announcedMilestones.push(percent);
+        announce(percent + ' percent.');
       }
     }
 
-    function showError(status) {
-      errorMessage.innerText = status;
-      snapfileStatus.style.display = 'block';
-      uploadContainer.style.display = 'none';
-      progress.style.display = 'none';
-      progressPercentage.style.display = 'none';
+    function showProgress(file) {
+      announcedMilestones = [];
+      progressFilename.textContent = file.name;
+      setProgress(0);
+      uploadContainer.hidden = true;
+      snapfileStatus.hidden = false;
+      progress.hidden = false;
+      successMessage.hidden = true;
+      errorMessage.hidden = true;
+      cancelButton.focus();
     }
 
-    function hideStatus(status) {
-      if (status === 'progress') {
-        progress.style.display = 'none';
-        progressBar.parentElement.style.display = 'none';
+    function hideProgress() {
+      progress.hidden = true;
+    }
+
+    cancelButton.addEventListener('click', () => {
+      if (activeUpload) activeUpload.abort();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && activeUpload) activeUpload.abort();
+    });
+
+    // ---- results -------------------------------------------------------
+
+    function showError(title, hint, canRetry) {
+      uploadContainer.hidden = true;
+      snapfileStatus.hidden = false;
+      progress.hidden = true;
+      successMessage.hidden = true;
+
+      errorMessage.replaceChildren();
+      // Icon sits inside the heading so the pair centres as one unit above the explanation.
+      const heading = el('h2', 'result-title');
+      heading.appendChild(svgIcon('i-alert', 'icon'));
+      heading.appendChild(document.createTextNode(title));
+      errorMessage.appendChild(heading);
+      if (hint) errorMessage.appendChild(el('p', null, hint));
+
+      // Only offer an action when retrying can actually help. A reached quota has no action.
+      if (canRetry) {
+        const actions = el('div', 'actions');
+        const retry = el('button', 'btn btn-secondary', 'Try again');
+        retry.type = 'button';
+        retry.addEventListener('click', resetToDropzone);
+        actions.appendChild(retry);
+        errorMessage.appendChild(actions);
       }
+
+      errorMessage.hidden = false;
+      focusHeading(heading);
+    }
+
+    function resetToDropzone() {
+      fileInput.value = '';
+      errorMessage.hidden = true;
+      snapfileStatus.hidden = true;
+      uploadContainer.hidden = false;
+      browseButton.focus();
     }
 
     function showSuccess(data) {
-      // Validate and sanitize the server response (download URL path)
+      // Validate and sanitize the server response (download URL path).
       // Expected format: /download/{alphanumeric_code}
-      // Remove any characters that aren't alphanumeric, forward slash, or hyphen
       const sanitizedPath = data.replace(/[^a-zA-Z0-9\/\-]/g, '');
-      // Validate the path format - must start with /download/ followed by alphanumeric characters
       const downloadPathPattern = /^\/download\/[a-zA-Z0-9]+$/;
       if (!sanitizedPath || !downloadPathPattern.test(sanitizedPath)) {
-        showError('Invalid response from server');
+        showError('Invalid response from server', 'Please try the upload again.', true);
         return;
       }
 
       const landingURL = `${window.location.origin}/landing${sanitizedPath}`;
       const publicDownloadUrl = `${window.location.origin}${sanitizedPath}`;
 
-      // Clear existing content
-      successMessage.textContent = '';
+      successMessage.replaceChildren();
 
-      // Create success content container
-      const successContent = document.createElement('div');
-      successContent.className = 'success-content';
+      const head = el('div', 'result-head');
+      head.appendChild(svgIcon('i-check', 'icon'));
+      const body = el('div', 'result-body');
+      const heading = el('h2', 'result-title', 'Your link is ready');
+      body.appendChild(heading);
+      body.appendChild(el('p', null, 'Share the link to the download page. One download only; after that the file is deleted from the server.'));
+      head.appendChild(body);
+      successMessage.appendChild(head);
 
-      // Create heading
-      const h2 = document.createElement('h2');
-      h2.textContent = 'Upload successful';
-      successContent.appendChild(h2);
-
-      // Create first span with link
-      const span1 = document.createElement('span');
-      span1.textContent = 'Share the ';
-      const link1 = document.createElement('a');
-      link1.href = landingURL;
-      link1.className = 'success-link';
-      link1.textContent = 'link to the download page';
-      span1.appendChild(link1);
-      span1.appendChild(document.createTextNode('.'));
-      successContent.appendChild(span1);
-
-      // Create span with copy button
-      const span2 = document.createElement('span');
-      span2.className = 'success-span-share';
-      span2.textContent = 'Click the icon to copy link to clipboard: ';
-      const copyButton = document.createElement('button');
+      const linkbox = el('div', 'linkbox');
+      const label = el('label', 'sr-only', 'Download page link');
+      label.htmlFor = 'landing-link';
+      const field = el('input', 'field mono');
+      field.type = 'text';
+      field.id = 'landing-link';
+      field.readOnly = true;
+      field.value = landingURL;
+      const copyButton = el('button', 'btn btn-primary');
+      copyButton.type = 'button';
       copyButton.id = 'copy-landing-link-button';
-      copyButton.className = 'success-button';
-      copyButton.setAttribute('aria-label', 'Copy landing page link to clipboard');
-      const iconSpan = document.createElement('span');
-      iconSpan.className = 'material-icons';
-      iconSpan.textContent = 'content_copy';
-      copyButton.appendChild(iconSpan);
-      span2.appendChild(copyButton);
-      successContent.appendChild(span2);
+      copyButton.appendChild(svgIcon('i-copy', 'icon'));
+      copyButton.appendChild(document.createTextNode('Copy link'));
+      copyButton.addEventListener('click', () => copyToClipboard(landingURL, copyButton));
+      linkbox.append(label, field, copyButton);
+      successMessage.appendChild(linkbox);
 
-      // Create span with direct download link
-      const span3 = document.createElement('span');
-      span3.className = 'success-span-direct';
-      span3.textContent = 'Or use this direct ';
-      const link2 = document.createElement('a');
-      link2.href = publicDownloadUrl;
-      link2.className = 'success-link-direct';
-      link2.textContent = 'download-once-only link';
-      span3.appendChild(link2);
-      span3.appendChild(document.createTextNode('. The direct link is not suitable for Facebook and similar sharing, because they inspect the link before it\'s shared, causing the file to be registered as downloaded and then deleted.'));
-      successContent.appendChild(span3);
+      const open = el('p');
+      const landingLink = el('a', 'success-link', 'Open the download page');
+      landingLink.href = landingURL;
+      open.appendChild(landingLink);
+      successMessage.appendChild(open);
 
-      // Create link back span
-      const span4 = document.createElement('span');
-      span4.className = 'link-back-span';
-      span4.textContent = '[ ';
-      const link3 = document.createElement('a');
-      link3.href = '/';
-      link3.className = 'success-link-back';
-      link3.textContent = 'Share another file with SnapFile.me';
-      span4.appendChild(link3);
-      span4.appendChild(document.createTextNode(' ]'));
-      successContent.appendChild(span4);
+      const details = el('details');
+      details.appendChild(el('summary', null, 'Direct download link'));
+      const directText = el('p');
+      directText.appendChild(document.createTextNode('Or use this direct '));
+      const directLink = el('a', 'success-link-direct', 'download-once link');
+      directLink.href = publicDownloadUrl;
+      directText.appendChild(directLink);
+      directText.appendChild(document.createTextNode('. It is not suitable for Facebook and similar services: they inspect a link before sharing it, which counts as the download and deletes the file.'));
+      details.appendChild(directText);
+      successMessage.appendChild(details);
 
-      // Append to success message temporarily
-      successMessage.appendChild(successContent);
-      successMessage.style.display = 'block';
-      snapfileStatus.style.opacity = 0; // Start fading out
-      setTimeout(() => {
-        // Replace all children of snapfileStatus with cloned safe content
-        // This matches the original behavior where innerHTML replaced everything
-        const clonedContent = successContent.cloneNode(true);
-        snapfileStatus.replaceChildren(clonedContent);
-        snapfileStatus.style.opacity = 1; // Fade in the success message
-        // Find the button in the cloned content and attach event listener
-        const copyButton = clonedContent.querySelector('#copy-landing-link-button');
-        if (copyButton) {
-          copyButton.addEventListener('click', () => {
-            copyToClipboard(landingURL); // Pass the correct URL
-          });
-        }
-        updateQuotaInfo();
-      }, 500); // Wait for the fade-out to complete
+      const actions = el('div', 'actions');
+      const again = el('a', 'btn btn-secondary success-link-back', 'Share another file');
+      again.href = '/';
+      actions.appendChild(again);
+      successMessage.appendChild(actions);
+
+      successMessage.hidden = false;
+      announce('Upload complete. Your link is ready.');
+      focusHeading(heading);
+      updateQuotaInfo();
     }
 
-    function copyToClipboard(text) {
+    // ---- command-line helper: animated fallback where ::details-content is unsupported --------
+
+    (function () {
+      const details = document.querySelector('.cli-help');
+      const supportsNative = CSS.supports && CSS.supports('selector(::details-content)');
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!details || supportsNative || reduced) return;
+      const body = details.querySelector('.cli-body');
+      const summary = details.querySelector('summary');
+      summary.addEventListener('click', (e) => {
+        if (details.open) {
+          e.preventDefault();
+          const h = body.offsetHeight;
+          body.style.overflow = 'hidden';
+          body.animate({ height: [h + 'px', '0px'], opacity: [1, 0] }, { duration: 220, easing: 'ease-out' })
+            .finished.then(() => { details.open = false; body.style.overflow = ''; });
+        } else {
+          requestAnimationFrame(() => {
+            const h = body.offsetHeight;
+            body.style.overflow = 'hidden';
+            body.animate({ height: ['0px', h + 'px'] }, { duration: 260, easing: 'ease-out' })
+              .finished.then(() => { body.style.overflow = ''; });
+          });
+        }
+      });
+    })();
+
+    // ---- clipboard -----------------------------------------------------
+
+    function copyToClipboard(text, button) {
       navigator.clipboard.writeText(text).then(() => {
-        showLinkCopyNotification('Copied to clipboard!');
-      }).catch(err => {
+        showLinkCopyNotification('Copied to clipboard');
+        announce('Link copied to clipboard.');
+        if (button) {
+          const use = button.querySelector('use');
+          if (use) { use.setAttribute('href', '#i-check'); setTimeout(() => use.setAttribute('href', '#i-copy'), 2000); }
+        }
+      }).catch((err) => {
         console.error('Error copying text: ', err);
+        announce('Copy failed. Select the link text and copy it manually.');
       });
     }
 
-    function showLinkCopyNotification(message) {
-      linkCopyNotification.innerText = message;
-      linkCopyNotification.style.display = 'block';
-      setTimeout(() => {
-        linkCopyNotification.style.opacity = 0;
-        setTimeout(() => {
-          linkCopyNotification.style.display = 'none';
-          linkCopyNotification.style.opacity = 1;
-        }, 500);
-      }, 3000);
-    }
-
-    // Check limit status on page load
-    window.addEventListener('load', () => {
-      fetch('/check-limit')
-        .then(response => response.json())
-        .then(data => {
-          if (data.limit_reached) {
-            showError('Upload limit has been reached.');
-          }
-          document.querySelector('.quota-info').innerText = `You have ${data.quota_left} uploads left on your quota.
-            The quota will reset in ${data.quota_renewal_hours} hours and ${data.quota_renewal_minutes} minutes.`;
-        })
-        .catch(error => {
-          console.error('Error checking limit:', error);
-        });
+    document.getElementById('copy-cli-command-button').addEventListener('click', (e) => {
+      copyToClipboard(document.getElementById('cli-command').innerText, e.currentTarget);
     });
 
-    function preventDefault(e) {
-      e.preventDefault();
+    let toastTimer = null;
+    function showLinkCopyNotification(message) {
+      linkCopyNotification.replaceChildren(svgIcon('i-check', 'icon'), document.createTextNode(message));
+      linkCopyNotification.hidden = false;
+      linkCopyNotification.style.opacity = 1;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        linkCopyNotification.style.opacity = 0;
+        setTimeout(() => { linkCopyNotification.hidden = true; }, 250);
+      }, 2500);
     }
 
-    // Function to update quota information
-    function updateQuotaInfo() {
-      fetch('/check-limit')
-        .then(response => response.json())
-        .then(data => {
-          document.querySelector('.quota-info').innerText = `You have ${data.quota_left} uploads left on your quota.
-            The quota will reset in ${data.quota_renewal_hours} hours and ${data.quota_renewal_minutes} minutes.`;
-        })
-        .catch(error => {
-          console.error('Error checking limit:', error);
-        });
+    // ---- quota ---------------------------------------------------------
+
+    function renderQuota(data) {
+      quotaInfo.replaceChildren();
+      quotaInfo.appendChild(document.createTextNode('Quota: '));
+      quotaInfo.appendChild(el('b', null, data.quota_left + ' uploads'));
+      quotaInfo.appendChild(document.createTextNode(' left · resets in '));
+      quotaInfo.appendChild(el('b', null, data.quota_renewal_hours + ' h ' + data.quota_renewal_minutes + ' min'));
     }
+
+    function updateQuotaInfo() {
+      return fetch('/check-limit')
+        .then((response) => response.json())
+        .then((data) => { renderQuota(data); return data; })
+        .catch((error) => { console.error('Error checking limit:', error); });
+    }
+
+    window.addEventListener('load', () => {
+      updateQuotaInfo().then((data) => {
+        if (data && data.limit_reached) {
+          showError('Upload limit has been reached.', 'The quota resets automatically. Check the time shown below.', false);
+        }
+      });
+    });
   </script>
 {% endblock %}
