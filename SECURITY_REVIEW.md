@@ -6,6 +6,32 @@
 
 ---
 
+## Addendum: audit of 2026-09-04 (redesign branch)
+
+A second whole-system pass was made after the ArktIQ IT sponsored redesign. No high or critical issues were found; all medium and low findings below were fixed in the same change set, with regression tests in `tests/unit/test_hardening.py`.
+
+| Severity | Finding | Fix |
+|----------|---------|-----|
+| Medium | Single-use was not atomic: the row was deleted 5 s after serving, so concurrent or repeated requests within the window all received the file | `DELETE … RETURNING` claims the row before serving; the second request gets 404 and the landing page reports the file as gone |
+| Medium | Quota keyed on the exact IPv6 address, giving a /64 holder 2^64 identities | IPv6 normalised to its /64 network before hashing (`normalize_ip`) |
+| Medium | No storage budget or free-space check; a pool of addresses could fill the disk | `MIN_FREE_DISK_BYTES` reserve check and optional `STORAGE_BUDGET_BYTES` cap, HTTP 507; file sizes now stored |
+| Medium | Compose published port 8080 on all interfaces while trusting `X-Forwarded-For` | Port bound to `127.0.0.1`; optional `TRUSTED_PROXY_IPS` restricts header trust to known proxy addresses; startup warnings when unset |
+| Low | Request host reflected into canonical, Open Graph and CLI links when `PUBLIC_BASE_URL` is empty | Documented as required in production; startup warning when unset |
+| Low | CSP carried `'unsafe-inline'` for styles and Google Fonts hosts; default analytics allowlist included Google Tag Manager; `ANALYTICS_SCRIPT_CSP` spliced in unvalidated | `style-src 'self'; font-src 'self'`; allowlist reduced to Plausible hosts; CSP origin validated as a single https origin |
+| Low | File names over ~200 characters caused an unhandled 500 | Names truncated to 150 characters keeping the extension |
+| Low | Cross-site check relied solely on `Sec-Fetch-Site` | `Origin` header fallback: mismatching or `null` origins are rejected; header-less clients (curl) still allowed |
+| Low | No upload timeouts or concurrency cap; slow clients held slots indefinitely | 60 s per-chunk timeout (408) and a 20-upload semaphore (503), both configurable |
+| Low | Landing page cacheable; showed the internal address even when unset | `Cache-Control: no-store`; direct-IP paragraph rendered only when `INTERNAL_IP` is configured |
+| Info | Browser uploads streamed oversized files before rejection | Client-side size check before sending; server rejects clearly oversized `Content-Length` with 413 |
+| Info | Health check rendered the front page every 30 s and filled the access log | `/healthz` returns 204 and is excluded from the access log |
+| Info | No index on `files.download_code` | Index added at start-up |
+
+Privacy-related changes made in the same period and verified: IP hashes are keyed with a per-instance secret stored with mode 600; download codes are redacted from access log paths and referrers; fonts are self-hosted so a page load makes no third-party request; `robots.txt` disallows the consuming download URLs; landing and error pages are `noindex`.
+
+Residual, accepted: naive local timestamps (a DST change shifts deadlines by an hour); the in-memory salt fallback when the data directory is unwritable resets quotas on restart; the direct-IP download is plain HTTP by design and is explained in the privacy policy.
+
+---
+
 ## Executive Summary
 
 The previous review rated the project highly, and the fundamentals (parameterized SQL, autoescaped templates, nonce-based CSP, non-root container, automated scanning) still hold. This audit went a level deeper than a checklist and found a number of concrete weaknesses, all of which have been fixed in the accompanying change set:

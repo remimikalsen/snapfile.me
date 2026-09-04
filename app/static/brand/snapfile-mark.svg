@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="170 145 700 700" width="512" height="512" role="img" aria-labelledby="t">
+  <title id="t">Snapfile</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#C6E4F7"/>
+      <stop offset="1" stop-color="#6FB0E0"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#1C4E7E" stroke-width="14" stroke-linejoin="round">
+    <path d="M355 192 H575 L745 362 V772 Q745 800 717 800 H300 V262 Z" fill="url(#g)"/>
+    <path d="M300 262 L355 192 L472 612 L300 800 Z" fill="#2F7CB8" fill-opacity="0.35" stroke="none"/>
+    <path d="M300 800 L745 362 V772 Q745 800 717 800 Z" fill="#1C4E7E" fill-opacity="0.45" stroke="none"/>
+    <path d="M355 192 L578 527" fill="none" stroke-width="10"/>
+    <path d="M355 192 L472 612 M300 800 L745 362" fill="none" stroke-width="10"/>
+    <path d="M575 192 V362 H745 Z" fill="#DCEEF9"/>
+  </g>
+</svg>

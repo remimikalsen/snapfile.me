@@ -144,11 +144,17 @@ There are ample configuration opportunities whether you run through Docker or Do
 - `PURGE_INTERVAL_MINUTES`: Interval in minutes for purging expired files and cleaning up the database (default: 5 minutes).
 - `CONSISTENCY_CHECK_INTERVAL_MINUTES`: Interval in minutes for checking database/file consistency and cleaning up (default: 1440 minutes or 24 hours).
 - `TRUSTED_PROXY_COUNT`: Number of reverse proxies in front of Snapfile that append to `X-Forwarded-For` (default: 1). Set to `0` if clients connect directly, otherwise a client can forge the header and bypass the upload quota. See [Reverse proxies and client IPs](#reverse-proxies-and-client-ips).
-- `PUBLIC_BASE_URL`: Absolute URL clients use to reach Snapfile, e.g. `https://snapfile.me`. Used to build the links returned to command line uploads and shown in the front page helper. When empty (default) the URL is derived from the request's `Host` header, plus `X-Forwarded-Proto` / `X-Forwarded-Host` when `TRUSTED_PROXY_COUNT` is greater than 0.
+  Publish the container port on loopback only (`127.0.0.1:8080:8080`, as in `docker-compose.yml`) or set `TRUSTED_PROXY_IPS`, so nobody can bypass the proxy. IPv6 clients are counted per /64 network, not per address.
+- `PUBLIC_BASE_URL`: Absolute URL clients use to reach Snapfile, e.g. `https://snapfile.me`. Used for command line links, canonical URLs and social sharing cards. **Always set this in production.** When empty (default) the URL is derived from the request's `Host` header, plus `X-Forwarded-Proto` / `X-Forwarded-Host` when a trusted proxy is configured, which lets a misconfigured proxy pass client-chosen hosts through.
+- `TRUSTED_PROXY_IPS`: Optional comma-separated proxy addresses or CIDR ranges (e.g. `172.18.0.0/16,127.0.0.1`). When set, `X-Forwarded-*` headers are honoured only for connections from these addresses, so a client that reaches Snapfile directly cannot forge its IP (default: empty, meaning any connection is assumed to come through the proxy).
+- `MIN_FREE_DISK_BYTES`: Uploads are refused with HTTP 507 when accepting one more maximum-size file would leave less free disk than this (default: 268435456, 256 MB).
+- `STORAGE_BUDGET_BYTES`: Optional cap on total stored bytes; uploads are refused with 507 when it would be exceeded (default: 0, no cap).
+- `MAX_CONCURRENT_UPLOADS`: Uploads in flight at once; further uploads get HTTP 503 until one finishes (default: 20).
+- `UPLOAD_READ_TIMEOUT_SECONDS`: A client that sends no data for this long has its upload cancelled with HTTP 408 (default: 60).
 - `INTERNAL_IP`: Internal IP address for direct download links.
 - `INTERNAL_PORT`: Internal port for direct download links.
 - `ANALYTICS_SCRIPT`: The complete script tag needed for tracking from e.g. Plausible (default: empty)
-- `ANALYTICS_SCRIPT_CSP`: If the analytics script is located on a different domain, add the domain to the CSP header; e.g. https://plausible.yourdomain.com (default: empty)
+- `ANALYTICS_SCRIPT_CSP`: If the analytics script is located on a different domain, add its origin to the CSP header; e.g. `https://plausible.yourdomain.com`. Must be a single `https://` origin; anything else is ignored with a warning (default: empty). Only anonymised, cookie-free analytics belong here; the default domain allowlist (`ALLOWED_ANALYTICS_DOMAINS`) contains Plausible hosts only, because tag managers can load arbitrary scripts and would void the privacy policy.
 
 These environment variables allow the app to be configured for different deployment scenarios and usage patterns.
 

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy policy — Snapfile{% endblock %}
+
+{% block content %}
+  <article class="doc" aria-labelledby="privacy-title">
+    <p class="eyebrow">Privacy policy</p>
+    <h1 id="privacy-title">What Snapfile knows about you, and for how long</h1>
+    <p class="doc-meta">Last updated 4 September 2026</p>
+
+    <div class="summary">
+      <h2>In short</h2>
+      <ul>
+        <li>No accounts, no email addresses, no tracking, no cookies.</li>
+        <li>Your file is deleted within minutes of being downloaded, or after {{ file_expiry_hours }} hours{% if file_expiry_minutes %} {{ file_expiry_minutes }} minutes{% endif %} if nobody fetches it.</li>
+        <li>We keep a salted hash of your IP address for about {{ quota_window_text }}, only to limit how many files one connection can upload.</li>
+        <li>Everything is hosted in Norway. Nothing is shared with, or sold to, anyone.</li>
+      </ul>
+    </div>
+
+    <h2>Who is responsible</h2>
+    <p>
+      Snapfile is a privately run, open-source service. The person who maintains the <a href="https://github.com/remimikalsen/snapfile.me" rel="external noopener">Snapfile project on GitHub</a> operates this instance and is the data controller for the processing described here.
+      The service runs on privately hosted servers located in Norway and is governed by Norwegian law, including the Personal Data Act and the EU General Data Protection Regulation (GDPR).
+    </p>
+    <p>
+      Snapfile is sponsored by ArktIQ IT AS. The sponsor does not host the service, does not operate the servers and has no access to any uploaded file or other data.
+    </p>
+    <p>
+      Questions about privacy, or requests concerning your data, can be raised by <a href="https://github.com/remimikalsen/snapfile.me/issues" rel="external noopener">opening a ticket in the GitHub repository</a>. Please do not include personal details or file contents in a ticket, since tickets are public.
+    </p>
+
+    <h2>What we process</h2>
+
+    <h3>The file you upload</h3>
+    <p>
+      The file is stored on the server until it is downloaded once, or until it expires {{ file_expiry_hours }} hours{% if file_expiry_minutes %} {{ file_expiry_minutes }} minutes{% endif %} after upload, whichever comes first.
+      It is then deleted within minutes. A background job runs every {{ purge_interval_minutes }} minutes to remove anything that has expired.
+      We do not open, scan, index or analyse the contents of your files, and the file name is shown only to whoever holds the download link.
+    </p>
+    <p>
+      Traffic between your browser and this site is encrypted (HTTPS). There is one deliberate exception: the download page also offers a <em>direct IP download</em> for recipients who are on the same local network as the server.
+      That link points at the server's internal address over plain HTTP, because a private network address cannot carry a public certificate. The traffic never leaves that local network, but it is not encrypted, so use the ordinary link whenever you are anywhere else.
+    </p>
+    <p>
+      The download link contains a random code that cannot be guessed. Anyone who has the link can download the file once, so treat the link like the file itself.
+    </p>
+
+    <h3>A hash of your IP address</h3>
+    <p>
+      To stop a single connection from flooding the service, we count uploads per IP address.
+      We never store the address itself. Instead we store a salted SHA-256 hash of it, together with a counter and a timestamp.
+      The salt is a random secret that exists only on this server, which means the hash cannot be reversed by simply trying every possible address.
+      The record is deleted about {{ quota_window_text }} after your last upload. It is not linked to any file.
+    </p>
+
+    <h3>Technical server logs</h3>
+    <p>
+      Like every web server, ours writes an access log line for each request: the requesting IP address, the time, the request method and path, the response status, the referring page if your browser sends one, and the browser's identification string.
+      Download codes are removed from the logged path before the line is written, so a log entry cannot be tied to a particular file or download.
+      The logs are kept for security and abuse prevention only and are not combined with any other data.
+    </p>
+
+    <h3>Nothing else</h3>
+    <p>
+      There are no user accounts, and we never ask for your name or email address.
+      {% if analytics_enabled %}
+      We count visits with anonymised web analytics, loaded from <code>{{ analytics_host }}</code>. It uses no cookies, stores nothing in your browser, does not record your IP address in a form that can identify you, and cannot follow you to other sites. It tells us how many people use Snapfile and which pages they view, nothing about who they are. See the <a href="/cookies">cookie policy</a>.
+      {% else %}
+      We run no analytics or advertising scripts.
+      {% endif %}
+      Fonts and all other assets are served from our own server.
+    </p>
+
+    <h2>Why we are allowed to do this</h2>
+    <p>
+      Storing your file is necessary to provide the service you asked for (GDPR article 6(1)(b)).
+      Counting uploads per hashed address, keeping server logs and measuring anonymised usage is our legitimate interest in keeping a free service available and secure (article 6(1)(f)).
+      We process nothing beyond that.
+    </p>
+
+    <h2>Who receives your data</h2>
+    <p>
+      Nobody. We do not share, sell or transfer any data to third parties, including the sponsor, and no data leaves Norway.
+      The only exception is a legal obligation, such as a valid order from a Norwegian court, in which case we could hand over only what we still hold at that moment, which is usually nothing.
+    </p>
+
+    <h2>How long we keep things</h2>
+    <div class="scroll">
+      <table class="spec">
+        <thead><tr><th scope="col">Data</th><th scope="col">Kept until</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Uploaded file and its name</th><td>Minutes after the first download, or {{ file_expiry_hours }} h{% if file_expiry_minutes %} {{ file_expiry_minutes }} min{% endif %} after upload</td></tr>
+          <tr><th scope="row">Salted hash of your IP address, upload counter</th><td>About {{ quota_window_text }} after your last upload</td></tr>
+          <tr><th scope="row">Server access logs (without download codes)</th><td>Kept for security and abuse prevention</td></tr>
+          <tr><th scope="row">Theme preference</th><td>Only in your own browser, until you clear it (see the <a href="/cookies">cookie policy</a>)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Your rights</h2>
+    <p>
+      Under the GDPR you have the right to access, correct, delete and restrict the processing of your personal data, and to object to it.
+      Because we hold no identity and only a salted hash of an address, we are normally unable to tell which data, if any, belongs to you.
+      You can delete a file yourself at any time by downloading it, or simply by letting the link expire.
+      You also have the right to complain to the Norwegian Data Protection Authority, <a href="https://www.datatilsynet.no" rel="external noopener">Datatilsynet</a>.
+    </p>
+
+    <h2>Changes</h2>
+    <p>
+      If this policy changes, the new version is published here with a new date. The service is <a href="https://github.com/remimikalsen/snapfile.me" rel="external noopener">open source</a>, so you can also verify what it does rather than take our word for it.
+    </p>
+
+    <p class="doc-back"><a href="/" class="btn btn-secondary">Back to Snapfile</a></p>
+  </article>
+{% endblock %}

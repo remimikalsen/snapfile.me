@@ -7,8 +7,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.snapfile
+    # Bind to loopback so only the reverse proxy on this host can reach the app. Exposing
+    # 8080 publicly would let clients bypass TLS and forge X-Forwarded-For.
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     # Container hardening: no privilege escalation, no Linux capabilities, read-only
     # root filesystem (only the two data volumes are writable).
     security_opt:
@@ -32,11 +34,24 @@ services:
       # Nginx/Traefik). Set to 0 if clients reach Snapfile directly, otherwise the quota
       # can be bypassed with a forged header.
       - TRUSTED_PROXY_COUNT=1
+      # Optional: only believe X-Forwarded-* from these proxy addresses or CIDR ranges,
+      # e.g. 172.18.0.0/16 for a Docker network or 127.0.0.1 for a proxy on this host.
+      - TRUSTED_PROXY_IPS=
+      # Refuse uploads when free disk would drop below this reserve (bytes), and
+      # optionally cap total stored bytes (0 = no cap).
+      - MIN_FREE_DISK_BYTES=268435456
+      - STORAGE_BUDGET_BYTES=0
+      # Uploads in flight at once, and seconds to wait for each chunk from a slow client.
+      - MAX_CONCURRENT_UPLOADS=20
+      - UPLOAD_READ_TIMEOUT_SECONDS=60
+      # Anonymised, cookie-free analytics only (e.g. Plausible). Leave empty to disable.
       - ANALYTICS_SCRIPT=
       - ANALYTICS_SCRIPT_CSP=
+      # Set to true in production behind TLS: sends HSTS and forces https in generated links.
       - HTTPS_ONLY=false
-      # Absolute URL clients use to reach Snapfile, e.g. https://snapfile.me. Used for the
-      # links returned to command line uploads; derived from the request when empty.
+      # Absolute URL clients use to reach Snapfile, e.g. https://snapfile.me. Always set this
+      # in production so links, canonical URLs and sharing cards never depend on request
+      # headers. Derived from the request when empty.
       - PUBLIC_BASE_URL=
     volumes:
       - snapfile-uploads:/app/uploads

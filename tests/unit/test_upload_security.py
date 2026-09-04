@@ -102,7 +102,7 @@ async def test_part_without_filename_is_400_not_500(client):
 
 async def test_oversize_upload_leaves_no_file_and_releases_quota(client):
     resp = await client.post("/upload", data=_form(b"x" * 2048))
-    assert resp.status == 400
+    assert resp.status == 413
     assert await _quota_left(client) == 3
     assert list(client.upload_dir.iterdir()) == []
 

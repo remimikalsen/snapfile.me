@@ -3,63 +3,158 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}SnapFile.me{% endblock %}</title>
-  <link rel="icon" href="/static/favicon.png" type="image/png">
-  <link rel="stylesheet" href="/static/css/styles.css?v4">
+  <title>{% block title %}Snapfile{% endblock %}</title>
 
-  <meta name="title" property="og:title" content="SnapFile.me">
-  <meta name="description" property="og:description" content="Simple and secure file sharing">
-  <meta property="og:image" content="/static/favicon.png">
-  <meta property="og:url" content="https://snapfile.me">
+  <link rel="icon" href="/static/brand/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/static/brand/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="/static/brand/favicon-16.png" sizes="16x16" type="image/png">
+  <link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F3F6FA">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0C1424">
+
+  <link rel="stylesheet" href="/static/css/fonts.css?v1">
+  <link rel="stylesheet" href="/static/css/styles.css?v6">
+  {% if PAGE_URL %}<link rel="canonical" href="{% block canonical %}{{ PAGE_URL }}{% endblock %}">{% endif %}
+  {% block robots %}{% endblock %}
+
+  {% block social_meta %}
+  <meta name="description" content="Upload a file and get a single-use link. The file is deleted right after it is downloaded. Free, anonymous and open source.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Snapfile">
+  <meta property="og:title" content="Snapfile — secure single-use file sharing">
+  <meta property="og:description" content="Upload a file and get a single-use link. The file is deleted right after it is downloaded. Free, anonymous and open source.">
+  <meta property="og:url" content="{{ PAGE_URL }}">
+  <meta property="og:image" content="{{ BASE_URL }}/static/brand/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Snapfile logo, a folded sheet of paper, with the words Secure single-use file sharing.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Snapfile — secure single-use file sharing">
+  <meta name="twitter:description" content="Upload a file and get a single-use link. The file is deleted right after it is downloaded. Free, anonymous and open source.">
+  <meta name="twitter:image" content="{{ BASE_URL }}/static/brand/social-card.png">
+  {% endblock %}
+
+  <script nonce="{{ CSP_NONCE }}">
+    // Apply a saved theme before first paint. No saved theme = follow the system.
+    (function () {
+      try {
+        var t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
 
   {% block extra_head %}{% endblock %}
   {% if ANALYTICS_SCRIPT %}{{ ANALYTICS_SCRIPT|safe }}{% endif %}
 </head>
 <body>
-  <header>
-    <a href="/" class="logo-link">
-      <h1>SnapFile.me</h1>
+  <svg width="0" height="0" class="sr-only" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="sf-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C6E4F7"/><stop offset="1" stop-color="#6FB0E0"/></linearGradient>
+      <symbol id="sf-mark" viewBox="170 145 700 700">
+        <g stroke-width="22" stroke-linejoin="round">
+          <path d="M355 192 H575 L745 362 V772 Q745 800 717 800 H300 V262 Z" fill="url(#sf-g)"/>
+          <path d="M300 262 L355 192 L472 612 L300 800 Z" fill="#2F7CB8" fill-opacity=".35" stroke="none"/>
+          <path d="M300 800 L745 362 V772 Q745 800 717 800 Z" fill="#1C4E7E" fill-opacity=".45" stroke="none"/>
+          <path d="M355 192 L578 527 M355 192 L472 612 M300 800 L745 362" fill="none" stroke-width="16"/>
+          <path d="M575 192 V362 H745 Z" fill="#DCEEF9"/>
+        </g>
+      </symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0-4 4m4-4 4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0 4-4m-4 4-4-4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+      <symbol id="i-file" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zm0 0v5h5"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" d="M9 9h10v10H9zM5 15V5h10"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 3 2 21h20zm0 7v5m0 3v.5"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.75"/><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+      <symbol id="i-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.75"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
+    </defs>
+  </svg>
+
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <a href="/" class="brand">
+      <svg aria-hidden="true" focusable="false"><use href="#sf-mark"/></svg>
+      <span>Snapfile</span>
     </a>
-    <p class="header">Simple and secure file sharing</p>
-    <!-- Dark Mode Toggle Button -->
-    <button title="Toggle dark Mode" id="theme-toggle" aria-label="Toggle Dark Mode">🌙</button>
+    <p class="tagline">Secure single-use file sharing</p>
+    <button type="button" id="theme-toggle" class="btn btn-secondary theme-toggle" data-mode="auto">
+      <span class="sr-only">Theme: </span>
+      <span data-mode-label="auto"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-auto"/></svg>Auto</span>
+      <span data-mode-label="light" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg>Light</span>
+      <span data-mode-label="dark" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-moon"/></svg>Dark</span>
+    </button>
   </header>
 
-  <main>
+  <main id="main" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
 
-  <footer>
-    <p>
-      Version <a href="https://github.com/remimikalsen/snapfile.me/pkgs/container/snapfile">{{ VERSION }}</a>.
-      Brought to you by <a href="https://theawesomegarage.com" target="_blank">TheAwesomeGarage.com</a>
-    </p>
-    <p>
-      Why not try out <a href="https://credshare.app" target="_blank">CredShare.app</a>?
-      Password sharing made simple.
-    </p>
-    <p>
-      View the source code on <a href="https://github.com/remimikalsen/snapfile.me" target="_blank">GitHub.com</a>
+  <footer class="site-footer">
+    <aside class="sponsor" aria-labelledby="sponsor-title">
+      <div class="sponsor-text">
+        <p class="eyebrow">Sponsored by</p>
+        <p id="sponsor-title" class="sponsor-name">ArktIQ IT <span>AS</span></p>
+        <p class="sponsor-blurb">Over 25 years of expertise in system integration, custom applications and security. Tomasjord, Norway.</p>
+      </div>
+      <a href="https://arktiq.no" class="btn btn-secondary" rel="sponsored noopener">Visit arktiq.no</a>
+    </aside>
+    <p class="footer-meta">
+      <span>Snapfile <a href="https://github.com/remimikalsen/snapfile.me/pkgs/container/snapfile" rel="external noopener">version {{ VERSION }}</a></span>
+      <span><a href="https://github.com/remimikalsen/snapfile.me" rel="external noopener">Source on GitHub</a></span>
+      <span><a href="/privacy">Privacy policy</a></span>
+      <span><a href="/cookies">Cookie policy</a></span>
+      <span>Need to share a password? <a href="https://credshare.app" rel="external noopener">CredShare.app</a></span>
     </p>
   </footer>
+
+  <p id="page-status" role="status" aria-live="polite" aria-atomic="true" class="sr-only"></p>
 
   {% block extra_scripts %}{% endblock %}
 
   <script nonce="{{ CSP_NONCE }}">
-    // Check for a saved theme or default to 'light'
-    const toggleButton = document.getElementById('theme-toggle');
-    const currentTheme = localStorage.getItem('theme') || 'light';
-    if (currentTheme === 'dark') {
-      document.body.classList.add('dark');
-      toggleButton.textContent = '☀️';
-    }
+    (function () {
+      // Three states. "auto" stores nothing and follows the system; "light" and
+      // "dark" store one word in localStorage under the key "theme".
+      var root = document.documentElement;
+      var toggle = document.getElementById('theme-toggle');
+      var status = document.getElementById('page-status');
+      var NEXT = { auto: 'light', light: 'dark', dark: 'auto' };
+      var SAY = {
+        auto: 'Theme follows your system setting. Nothing is stored.',
+        light: 'Light theme on.',
+        dark: 'Dark theme on.'
+      };
 
-    toggleButton.addEventListener('click', () => {
-      document.body.classList.toggle('dark');
-      const newTheme = document.body.classList.contains('dark') ? 'dark' : 'light';
-      toggleButton.textContent = newTheme === 'dark' ? '☀️' : '🌙';
-      localStorage.setItem('theme', newTheme);
-    });
+      function storedMode() {
+        try {
+          var t = localStorage.getItem('theme');
+          return (t === 'light' || t === 'dark') ? t : 'auto';
+        } catch (e) { return 'auto'; }
+      }
+      function apply(mode) {
+        if (mode === 'auto') {
+          root.removeAttribute('data-theme');
+          try { localStorage.removeItem('theme'); } catch (e) {}
+        } else {
+          root.setAttribute('data-theme', mode);
+          try { localStorage.setItem('theme', mode); } catch (e) {}
+        }
+        toggle.dataset.mode = mode;
+        toggle.querySelectorAll('[data-mode-label]').forEach(function (el) {
+          el.hidden = el.dataset.modeLabel !== mode;
+        });
+        toggle.setAttribute('title', 'Theme: ' + mode + '. Press to switch to ' + NEXT[mode] + '.');
+      }
+      toggle.addEventListener('click', function () {
+        var next = NEXT[toggle.dataset.mode || storedMode()];
+        apply(next);
+        status.textContent = SAY[next];
+      });
+      apply(storedMode());
+    })();
   </script>
 </body>
 </html>

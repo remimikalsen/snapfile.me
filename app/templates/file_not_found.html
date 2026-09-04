@@ -1,11 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}SnapFile.me - File Not Found{% endblock %}
+{% block title %}Snapfile — File not found{% endblock %}
+
+{% block robots %}<meta name="robots" content="noindex, nofollow">{% endblock %}
 
 {% block content %}
-    <h1>File Not Found</h1>
-    <p>The file you are trying to download has already left the building.</p>
-    <div class="to-home">
-        <span class="link-back-span">Instead, why don't you [ <a href="/" class="success-link-back">share a file</a> ] with SnapFile.me?</span>
+  <section class="card" aria-labelledby="fnf-title">
+    <p class="eyebrow">Nothing to download</p>
+    <h1 id="fnf-title">This file has already left the building</h1>
+    <p class="card-lead">Either it was downloaded once, as designed, or the link expired. Files are never kept after that, so nobody else can fetch it either.</p>
+    <div class="actions to-home">
+      <a href="/" class="btn btn-primary success-link-back">Share a file</a>
     </div>
+  </section>
 {% endblock %}

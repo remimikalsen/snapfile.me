@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Cookie policy — Snapfile{% endblock %}
+
+{% block content %}
+  <article class="doc" aria-labelledby="cookies-title">
+    <p class="eyebrow">Cookie policy</p>
+    <h1 id="cookies-title">Snapfile sets no cookies</h1>
+    <p class="doc-meta">Last updated 4 September 2026</p>
+
+    <p>
+      Snapfile does not set, read or need cookies. There is no login, no session and no cross-site tracking, so there is nothing for a cookie to do.
+      This page exists because Norwegian law (the Electronic Communications Act, section 3-15) and the EU ePrivacy rules ask us to tell you about anything we store in your browser, and there is exactly one such thing.
+    </p>
+
+    <h2>One setting, stored in your browser</h2>
+    <p>
+      The theme button in the header cycles through three settings: Auto, Light and Dark. Auto follows your operating system and stores nothing. If you pick Light or Dark, that one word is saved in your browser's <code>localStorage</code> under the key <code>theme</code>, so the site opens in the mode you picked next time.
+    </p>
+    <ul>
+      <li>It holds one of two words, <code>light</code> or <code>dark</code>, and nothing else.</li>
+      <li>It never leaves your browser. It is not sent to our server or to anyone else.</li>
+      <li>It is not set at all while the button shows Auto, which is the default. Nothing is stored unless you choose Light or Dark.</li>
+      <li>Storing a setting you have explicitly asked for does not require consent, which is why you will see no cookie banner here.</li>
+    </ul>
+    <p>
+      To remove it, press the button until it shows Auto again, which deletes the stored value, or clear site data for this site in your browser.
+    </p>
+
+    <h2>Nothing from third parties</h2>
+    <p>
+      All fonts, scripts, styles and images are served from our own server, so no advertising network or social platform can set cookies or otherwise observe your visit.
+      {% if analytics_enabled %}
+      The one additional request goes to <code>{{ analytics_host }}</code>, which serves our anonymised visit counter. It sets no cookies, stores nothing in your browser, and cannot recognise you between visits or across sites.
+      {% endif %}
+    </p>
+
+    <h2>While you upload</h2>
+    <p>
+      The file you choose and the progress of the upload live only in your browser's memory for the duration of the upload. They are not stored, and closing the page discards them.
+    </p>
+
+    <p>For what happens to the file itself, see the <a href="/privacy">privacy policy</a>.</p>
+
+    <p class="doc-back"><a href="/" class="btn btn-secondary">Back to Snapfile</a></p>
+  </article>
+{% endblock %}

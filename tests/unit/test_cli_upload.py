@@ -102,7 +102,7 @@ async def test_put_chunked_oversize_leaves_no_file_and_releases_quota(client):
         yield b"x" * 1000
 
     resp = await client.put("/streamed.bin", data=body())
-    assert resp.status == 400
+    assert resp.status == 413
     assert await _quota_left(client) == 3
     assert list(client.upload_dir.iterdir()) == []
 
