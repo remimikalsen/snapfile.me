@@ -6,12 +6,12 @@
       <stop offset="1" stop-color="#6FB0E0"/>
     </linearGradient>
   </defs>
-  <g stroke="#1C4E7E" stroke-width="14" stroke-linejoin="round">
+  <g stroke="#1C4E7E" stroke-width="26" stroke-linejoin="round">
     <path d="M355 192 H575 L745 362 V772 Q745 800 717 800 H300 V262 Z" fill="url(#g)"/>
-    <path d="M300 262 L355 192 L472 612 L300 800 Z" fill="#2F7CB8" fill-opacity="0.35" stroke="none"/>
+    <path d="M300 262 L355 192 L466.5469 586.57797 L475.59897 618.59811 L300 800 Z" fill="#2F7CB8" fill-opacity="0.35" stroke="none"/>
     <path d="M300 800 L745 362 V772 Q745 800 717 800 Z" fill="#1C4E7E" fill-opacity="0.45" stroke="none"/>
-    <path d="M355 192 L578 527" fill="none" stroke-width="10"/>
-    <path d="M355 192 L472 612 M300 800 L745 362" fill="none" stroke-width="10"/>
+    <path d="M355 192 L578 527" fill="none" stroke-width="18"/>
+    <path d="M355 192 L476.1988 625.79606 M300 800 L745 362" fill="none" stroke-width="18"/>
     <path d="M575 192 V362 H745 Z" fill="#DCEEF9"/>
   </g>
 </svg>
