@@ -32,7 +32,7 @@ jobs:
           pip-audit --requirement requirements.txt --format json --output pip-audit-results.json || \
             (echo "::error::pip-audit found vulnerabilities in Python dependencies." && \
              echo "Please review and fix vulnerabilities before proceeding." && \
-             pip-audit --requirement requirements.txt --format table && exit 1)
+             pip-audit --requirement requirements.txt --format columns && exit 1)
           echo "pip-audit passed - no vulnerabilities found in Python dependencies."
 
       - name: Run linter
