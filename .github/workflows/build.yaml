@@ -9,6 +9,13 @@ permissions:
   contents: write   # allows pushing Git tags
   packages: write   # allows pushing to GHCR
 
+# A release build commits VERSION to main and pushes a tag. Two overlapping
+# builds read the same "latest tag", compute the same version and corrupt each
+# other, so release builds run one at a time and are never cancelled midway.
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -158,13 +165,21 @@ jobs:
           # Check if coverage artifacts exist before committing
           if [ -f "tests/coverage-badge.svg" ] && [ -f "tests/coverage.xml" ]; then
             git add VERSION tests/coverage-badge.svg tests/coverage.xml
-            git commit -m "ci: update VERSION file to $VERSION and coverage artifacts [skip ci]"
+            MSG="ci: update VERSION file to $VERSION and coverage artifacts [skip ci]"
           else
             git add VERSION
-            git commit -m "ci: update VERSION file to $VERSION [skip ci]"
+            MSG="ci: update VERSION file to $VERSION [skip ci]"
           fi
 
-          git push origin main
+          # If an earlier build already committed this VERSION but failed before
+          # pushing its tag, there is nothing new to commit. That is not an error:
+          # carry on so the tag and release for this version get created.
+          if git diff --cached --quiet; then
+            echo "VERSION $VERSION already committed on main; nothing to push."
+          else
+            git commit -m "$MSG"
+            git push origin main
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
