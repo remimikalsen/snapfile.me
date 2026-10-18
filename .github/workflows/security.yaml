@@ -154,8 +154,8 @@ jobs:
 
       - name: Run Opengrep SAST scan
         run: |
-          OPENGREP_VERSION=v1.29.0
-          OPENGREP_SHA256=3365ef49d04893e01338d85d9bbd49b2bd5261ad4c9c0df0a6a0f8d44232ae13
+          OPENGREP_VERSION=v1.30.2
+          OPENGREP_SHA256=a66aa3278457f02b287b985a45b6762aebcaba5000f2689245fd1ed86d1456c7
           wget -q "https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/opengrep_manylinux_x86" -O opengrep
           echo "${OPENGREP_SHA256}  opengrep" | sha256sum --check
           chmod +x opengrep
