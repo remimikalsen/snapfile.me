@@ -28,7 +28,7 @@ jobs:
           pip-audit --requirement requirements.txt --requirement requirements-dev.txt \
             --format json --output pip-audit-results.json || \
             (echo "::error::pip-audit found vulnerabilities in Python dependencies." && \
-             pip-audit --requirement requirements.txt --requirement requirements-dev.txt --format table && exit 1)
+             pip-audit --requirement requirements.txt --requirement requirements-dev.txt --format columns && exit 1)
           echo "pip-audit passed - no vulnerabilities found in Python dependencies."
 
       - name: Run bandit security linter
