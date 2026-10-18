@@ -77,7 +77,7 @@ jobs:
           fi
 
       - name: Upload Trivy results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: 'trivy-results-fs.sarif'
           category: 'trivy-fs'
@@ -138,7 +138,7 @@ jobs:
           fi
 
       - name: Upload Trivy image results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: 'trivy-results-image.sarif'
           category: 'trivy-image'
@@ -163,6 +163,6 @@ jobs:
         shell: bash -l {0}
 
       - name: Upload OpenGrep results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: 'opengrep_report.sarif'
