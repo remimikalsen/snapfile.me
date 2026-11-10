@@ -306,7 +306,7 @@ UPLOAD_DIR=/tmp/snapfile/uploads DATABASE_DIR=/tmp/snapfile/database watchfiles 
 
 The app will be available at `http://localhost:8080`.
 
-`watchfiles` watches the current working directory (`app/`) and all its subdirectories for changes to any file type — including Python files, HTML templates, static assets, etc. The app automatically restarts whenever a change is detected.
+`watchfiles` watches the current working directory (`app/`) and all its subdirectories for changes to any file type, including Python files, HTML templates, static assets, etc. The app automatically restarts whenever a change is detected.
 
 > **Note:** Templates and static files are resolved relative to `app.py`, so the app can be started from any directory. Running from `app/` simply keeps the watcher scoped to the application files.
 

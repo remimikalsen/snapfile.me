@@ -18,19 +18,19 @@
   {% block robots %}{% endblock %}
 
   {% block social_meta %}
-  <meta name="description" content="Upload a file and get a single-use link. The file is deleted right after it is downloaded. Free, anonymous and open source.">
+  <meta name="description" content="{{ self.share_description() }}">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Snapfile">
-  <meta property="og:title" content="Snapfile — secure single-use file sharing">
-  <meta property="og:description" content="Upload a file and get a single-use link. The file is deleted right after it is downloaded. Free, anonymous and open source.">
+  <meta property="og:title" content="{% block share_title %}Snapfile - Secure single-use file sharing{% endblock %}">
+  <meta property="og:description" content="{% block share_description %}Upload a file and get a single-use link. The file is deleted right after it is downloaded. Free, anonymous and open source.{% endblock %}">
   <meta property="og:url" content="{{ PAGE_URL }}">
   <meta property="og:image" content="{{ BASE_URL }}/static/brand/social-card.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="The Snapfile logo, a folded sheet of paper, with the words Secure single-use file sharing.">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Snapfile — secure single-use file sharing">
-  <meta name="twitter:description" content="Upload a file and get a single-use link. The file is deleted right after it is downloaded. Free, anonymous and open source.">
+  <meta name="twitter:title" content="{{ self.share_title() }}">
+  <meta name="twitter:description" content="{{ self.share_description() }}">
   <meta name="twitter:image" content="{{ BASE_URL }}/static/brand/social-card.png">
   {% endblock %}
 

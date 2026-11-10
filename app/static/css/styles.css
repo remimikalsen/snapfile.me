@@ -1,5 +1,5 @@
 /* ===========================================================
-   Snapfile — design tokens
+   Snapfile: design tokens
    Light is the default. Dark redefines tokens only; components
    never reference a theme directly.
    =========================================================== */
@@ -127,7 +127,7 @@ p { margin: 0; }
 .btn-secondary:hover { background: var(--subtle); color: var(--fg); }
 .btn-quiet { min-height: 40px; min-width: 40px; padding: 0 10px; background: transparent; color: var(--accent-fg); font-size: 14px; }
 .btn-quiet:hover { background: var(--accent-subtle); color: var(--accent-fg); }
-/* Two-layer focus ring: surface gap, then accent ring — visible on coloured buttons. */
+/* Two-layer focus ring: surface gap, then accent ring, visible on coloured buttons. */
 .btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--focus); }
 .field {
   display: block; width: 100%; min-height: 44px; padding: 0 12px;

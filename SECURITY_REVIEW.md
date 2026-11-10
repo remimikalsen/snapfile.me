@@ -133,7 +133,7 @@ The previous review rated the project highly, and the fundamentals (parameterize
 
 ## Testing performed
 
-- Unit tests: 18 (5 pre-existing + 13 new covering upload/download hardening, XFF trust, atomic quota under 10 concurrent uploads, aborted-upload cleanup, consistency-check grace period, legacy database migration) — pass on Python 3.12 and 3.14.
+- Unit tests: 18 (5 pre-existing + 13 new covering upload/download hardening, XFF trust, atomic quota under 10 concurrent uploads, aborted-upload cleanup, consistency-check grace period, legacy database migration); they pass on Python 3.12 and 3.14.
 - End-to-end (Playwright) tests: pass against the hardened container started via `docker-compose.yml`.
 - `pip-audit`: clean for both lockfiles. `bandit`: no findings. `flake8`/`black`: clean.
 - Trivy image scan: 0 fixable CRITICAL/HIGH findings; 0 findings of any severity in Python packages; the only remaining findings are unfixable Debian `perl-base` CVEs in the base image (see section 1).
